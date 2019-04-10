@@ -1,0 +1,3 @@
+Start with:
+$ mpirun --use-hwthread-cpus python mpi_hw.py 
+
