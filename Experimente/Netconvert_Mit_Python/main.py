@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from pprint import pprint
 import os
 import sys
 import subprocess
@@ -7,7 +8,7 @@ from pathlib import Path
 import tempfile
 import random
 import getopt
-
+import math
 #Ref
 #https://sumo.dlr.de/pydoc/sumolib.net.html
 #https://github.com/eclipse/sumo/blob/master/tests/tools/sumolib/patch_network/runner.py
@@ -86,6 +87,177 @@ def random_node_types(plain_files, patch_file, net_path, new_net_path, netcnvt_b
         print(str(res.stdout, "utf-8"))
         print("***")
 
+def experiment2(path):
+    net = sumoolib.net.readNet(str(path))
+    
+    
+def get_new_edge_shapes(edges, my_node, node_r):
+    
+    modified_edges = dict()
+    
+    node_x, node_y = my_node.getCoord()
+    for edge in edges:
+        edge_shape = edge.getShape()
+        nearest_x = float("inf")
+        nearest_y = float("inf")
+        nearest_dist = float("inf")
+        
+        new_shape=[]
+        for x, y in edge_shape:
+            dist = math.sqrt( (x - node_x)**2 + (y - node_y)**2 )
+            
+            if dist > node_r:
+                new_shape.append((x,y))
+            
+            if dist > node_r and dist < nearest_dist:
+                nearest_x = x
+                nearest_y = y
+                nearest_dist = dist
+                
+        modified_edges[edge.getID()] = {"nearest_x" : nearest_x, "nearest_y" : nearest_y, "nearest_dist" : nearest_dist, "new_shape" : new_shape}
+    return modified_edges
+
+def get_nearest_node_id(x, y, nodes):
+    nearest_id = None
+    dist = float("inf")
+    for n in nodes:
+        new_dist = math.sqrt( (x - n.x)**2 + (y - n.y)**2 )
+        if dist > new_dist:
+            nearest_id = n.id
+            dist = new_dist
+        
+    return nearest_id
+
+def experiment(path, plain_files, net_path, new_net_path, netcnvt_bin, verbose):
+    net = sumolib.net.readNet(str(path))
+    
+    my_node = net.getNode("498751220")
+    
+    node_x, node_y = my_node.getCoord()
+    node_r = 35
+    node_id = my_node.getID()
+    incoming_edges = get_new_edge_shapes(my_node.getIncoming(), my_node, node_r)
+    outgoing_edges = get_new_edge_shapes(my_node.getOutgoing(), my_node, node_r)
+    
+    all_edges = {**incoming_edges, **outgoing_edges}
+    
+    #################
+    ############Nodes
+    #################
+    loaded_nodes = list(sumolib.xml.parse(plain_files["nod"], "nodes"))[0]
+    
+    xmlNodeClass = sumolib.xml.compound_object("node", ["id", "type", "x", "y"])
+    
+    new_nodes = []
+    i=0
+    for e_id in incoming_edges:
+        new_nodes.append(xmlNodeClass(["newNode"+str(i), "priority", incoming_edges[e_id]["nearest_x"], incoming_edges[e_id]["nearest_y"]],{}))
+        i+=1
+    loaded_nodes.node = loaded_nodes.node + new_nodes
+    
+    
+    keep_nodes = []
+    for node in loaded_nodes.node:
+        if node.id == node_id:
+            continue
+        keep_nodes.append(node)
+    loaded_nodes.node = keep_nodes
+    
+    with open(plain_files["nod"], "w") as file_handle:
+        file_handle.write(loaded_nodes.toXML())
+    #################
+    #################
+    #################
+    
+    #################
+    ############Edges
+    #################
+    loaded_edges = list(sumolib.xml.parse(plain_files["edg"], "edges"))[0]
+    
+    #Change Shape
+    for edge in loaded_edges.edge:
+        if edge.id in all_edges:
+            new_shape = ""
+            for x,y in all_edges[edge.id]["new_shape"]:
+                new_shape += "{},{} ".format(x, y)
+            edge.shape=new_shape
+    
+    
+    for edge in loaded_edges.edge:
+        
+        if edge.attr_from == node_id:
+            edge.attr_from = get_nearest_node_id(all_edges[edge.id]["nearest_x"], all_edges[edge.id]["nearest_y"], new_nodes)
+        elif edge.to == node_id:
+            edge.to = get_nearest_node_id(all_edges[edge.id]["nearest_x"], all_edges[edge.id]["nearest_y"], new_nodes)
+        
+    
+    
+    with open(plain_files["edg"], "w") as file_handle:
+        file_handle.write(loaded_edges.toXML())
+    
+    #################
+    #################
+    #################
+    
+    
+    
+    #################
+    ######Connections
+    #################
+    loaded_connections = list(sumolib.xml.parse(plain_files["con"], "connections"))[0]
+    
+    # ~ node_to_del = net.getNode(node_id)
+    
+    # ~ inc = node_to_del.getIncoming()
+    # ~ out = node_to_del.getOutgoing()
+    # ~ relevant_edges = []
+    # ~ for e in inc + out:
+        # ~ relevant_edges.append(e.getID())
+    
+    # ~ if False:
+        # ~ new_connections = []
+        # ~ for connection in loaded_connections.connection:
+            # ~ #pprint(connection)
+            # ~ if connection.attr_from in relevant_edges and connection.to in relevant_edges:
+                # ~ pprint(connection)
+            # ~ else:
+                # ~ new_connections.append(connection)
+        # ~ loaded_connections.connection = new_connections
+    
+    loaded_connections.connection=[]
+    
+    with open(plain_files["con"], "w") as file_handle:
+        file_handle.write(loaded_connections.toXML())
+    #################
+    #################
+    #################
+    
+    
+    
+    
+    
+    
+    
+    res = subprocess.run([netcnvt_bin, "-n", plain_files["nod"], "-e", plain_files["edg"],
+                            "-x", plain_files["con"], "-i", plain_files["tll"], "-t", plain_files["typ"] , "-o", str(new_net_path)], capture_output=True)
+    if verbose:
+        print("Output from: ")
+        print(*res.args, sep=" ")
+        print(str(res.stderr, "utf-8"), file=sys.stderr)
+        print(str(res.stdout, "utf-8"))
+        print("***")
+    
+    #print("*")
+    #for edge in loaded_edges:
+    #    pprint(edge)
+    #    node.type = random.choice(node_types)
+    
+    #roundabout_incoming = 
+    #with open(new_edges_file[1], "w") as patch_file_handle: 
+    #    patch_file_handle.write(nodes.toXML())
+
+    
+    
 def main():
     
     PLAIN_PRFX="plain"
@@ -139,8 +311,16 @@ def main():
         sys.exit("Keine gültige .net.xml Datei spezifiziert.")
     
     new_net_path = Path(param_new_net_path).resolve()
-    patch_file = get_tmp_file_for_patch(plain_path)
-    random_node_types(plain_files, patch_file, net_path, new_net_path, netcnvt_bin, switch_verbose)
+    
+    # ~ new_edges_file = get_tmp_file_for_patch(plain_path)
+    # ~ new_nodes_file = get_tmp_file_for_patch(plain_path)
+    # ~ new_connections_file = get_tmp_file_for_patch(plain_path)
+    
+    ###
+    #random_node_types(plain_files, patch_file, net_path, new_net_path, netcnvt_bin, switch_verbose)
+    ###
+    experiment(net_path, plain_files, net_path, new_net_path, netcnvt_bin, switch_verbose)
+    ###
     
     if not switch_keep_temp:
         rm_tmpd_and_files(plain_path)
