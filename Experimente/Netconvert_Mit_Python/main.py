@@ -90,31 +90,59 @@ def random_node_types(plain_files, patch_file, net_path, new_net_path, netcnvt_b
 def experiment2(path):
     net = sumoolib.net.readNet(str(path))
     
+def get_intersection(lx, ly, cx, cy, r):
+    a = ly - cy
+    b = cx - lx
+    c = cx*ly - lx*cy
+    x_1 = cx + ( a*(c - a*cx - b*cy) + b * math.sqrt( r**2 * (a**2 + b**2) - (c - a*cx - b*cy)**2 ) / ( a**2 + b**2 ) )
+    x_2 = cx + ( a*(c - a*cx - b*cy) - b * math.sqrt( r**2 * (a**2 + b**2) - (c - a*cx - b*cy)**2 ) / ( a**2 + b**2 ) )
+    y_2 = cy + ( b*(c - a*cx - b*cy) + a * math.sqrt( r**2 * (a**2 + b**2) - (c - a*cx - b*cy)**2 ) / ( a**2 + b**2 ) )
+    y_1 = cy + ( b*(c - a*cx - b*cy) - a * math.sqrt( r**2 * (a**2 + b**2) - (c - a*cx - b*cy)**2 ) / ( a**2 + b**2 ) )
     
-def get_new_edge_shapes(edges, my_node, node_r):
+    return (x_1,y_1) if math.sqrt( (x_1 - lx)**2 + (y_1 - ly)**2 ) < math.sqrt( (x_2 - lx)**2 + (y_2 - ly)**2 ) else (x_2,y_2)
+
+def get_new_edge_shapes(inc, out, my_node, node_r):
     
     modified_edges = dict()
     
+    #find matching edges (opposite directions)
+    pairs = []
+    for i in inc:
+        p = [i]
+        for o in out:
+            if i.getFromNode() == o.getToNode():
+                p.append(o)
+        pairs.append(p)
+    
     node_x, node_y = my_node.getCoord()
-    for edge in edges:
-        edge_shape = edge.getShape()
-        nearest_x = float("inf")
-        nearest_y = float("inf")
-        nearest_dist = float("inf")
-        
-        new_shape=[]
-        for x, y in edge_shape:
-            dist = math.sqrt( (x - node_x)**2 + (y - node_y)**2 )
+    for pair in pairs:
+        for edge in pair:
+            match = pair[0].getID() if edge.getID() == pair[1].getID() else pair[1].getID()
+            is_incoming = False if edge.getID() == pair[1].getID() else True
+            edge_shape = edge.getRawShape()
+            nearest_x = float("inf")
+            nearest_y = float("inf")
+            nearest_dist = float("inf")
             
-            if dist > node_r:
-                new_shape.append((x,y))
-            
-            if dist > node_r and dist < nearest_dist:
-                nearest_x = x
-                nearest_y = y
-                nearest_dist = dist
+            new_shape=[]
+            for x, y in edge_shape:
+                dist = math.sqrt( (x - node_x)**2 + (y - node_y)**2 )
                 
-        modified_edges[edge.getID()] = {"nearest_x" : nearest_x, "nearest_y" : nearest_y, "nearest_dist" : nearest_dist, "new_shape" : new_shape}
+                if dist > node_r:
+                    new_shape.append((x,y))
+                
+                if dist > node_r and dist < nearest_dist:
+                    nearest_x = x
+                    nearest_y = y
+                    nearest_dist = dist
+                    
+            x_i, y_i = get_intersection(nearest_x, nearest_y, node_x, node_y, node_r)
+            if math.sqrt( (x_i - new_shape[0][0])**2 + (y_i - new_shape[0][1])**2 ) < math.sqrt( (x_i - new_shape[-1][0])**2 + (y_i - new_shape[-1][1])**2 ):
+                new_shape.insert(0, (x_i, y_i))
+            else:
+                new_shape.append((x_i,y_i))
+            
+            modified_edges[edge.getID()] = {"nearest_x" : nearest_x, "nearest_y" : nearest_y, "nearest_dist" : nearest_dist, "new_shape" : new_shape, "match" : match, "is_incoming" : is_incoming, "x_i" : x_i, "y_i" : y_i}
     return modified_edges
 
 def get_nearest_node_id(x, y, nodes):
@@ -134,12 +162,13 @@ def experiment(path, plain_files, net_path, new_net_path, netcnvt_bin, verbose):
     my_node = net.getNode("498751220")
     
     node_x, node_y = my_node.getCoord()
-    node_r = 35
+    node_r = 20
     node_id = my_node.getID()
-    incoming_edges = get_new_edge_shapes(my_node.getIncoming(), my_node, node_r)
-    outgoing_edges = get_new_edge_shapes(my_node.getOutgoing(), my_node, node_r)
     
-    all_edges = {**incoming_edges, **outgoing_edges}
+    all_edges = get_new_edge_shapes(my_node.getIncoming(), my_node.getOutgoing(), my_node, node_r)
+    #outgoing_edges = get_new_edge_shapes(my_node.getOutgoing(), my_node, node_r)
+    
+    #all_edges = {**incoming_edges, **outgoing_edges}
     
     #################
     ############Nodes
@@ -150,8 +179,10 @@ def experiment(path, plain_files, net_path, new_net_path, netcnvt_bin, verbose):
     
     new_nodes = []
     i=0
-    for e_id in incoming_edges:
-        new_nodes.append(xmlNodeClass(["newNode"+str(i), "priority", incoming_edges[e_id]["nearest_x"], incoming_edges[e_id]["nearest_y"]],{}))
+    for e_id in all_edges:
+        if not all_edges[e_id]["is_incoming"]:
+            continue
+        new_nodes.append(xmlNodeClass(["newNode"+str(i), "priority", all_edges[e_id]["x_i"], all_edges[e_id]["y_i"]],{}))
         i+=1
     loaded_nodes.node = loaded_nodes.node + new_nodes
     
@@ -173,7 +204,7 @@ def experiment(path, plain_files, net_path, new_net_path, netcnvt_bin, verbose):
     ############Edges
     #################
     loaded_edges = list(sumolib.xml.parse(plain_files["edg"], "edges"))[0]
-    
+    xmlEdgeClass = sumolib.xml.compound_object("edge", ["id", "from", "to", "priority", "type", "numLanes", "speed", "shape", "disallow"])
     #Change Shape
     for edge in loaded_edges.edge:
         if edge.id in all_edges:
@@ -189,6 +220,9 @@ def experiment(path, plain_files, net_path, new_net_path, netcnvt_bin, verbose):
             edge.attr_from = get_nearest_node_id(all_edges[edge.id]["nearest_x"], all_edges[edge.id]["nearest_y"], new_nodes)
         elif edge.to == node_id:
             edge.to = get_nearest_node_id(all_edges[edge.id]["nearest_x"], all_edges[edge.id]["nearest_y"], new_nodes)
+        
+    for node in new_nodes:
+        pprint(node)
         
     
     
