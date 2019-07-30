@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 import tempfile
 import math
+import uuid
 
 if "SUMO_HOME" in os.environ:
     tools = os.path.join(os.environ["SUMO_HOME"], "tools")
@@ -15,14 +16,6 @@ else:
     sys.exit("Umgebungsvariable 'SUMO_HOME' setzen.")
 
 import sumolib
-
-#global counter for unique ids
-mod_map_py__glbl_cntr = 0
-
-def glbl_cntr_get_next():
-    global mod_map_py__glbl_cntr
-    mod_map_py__glbl_cntr += 1
-    return mod_map_py__glbl_cntr
 
 def load_netconvert_binary():
     netcnvt = sumolib.checkBinary("netconvert")
@@ -311,7 +304,7 @@ def create_new_nodes_and_delete_old_node(node_id, all_edges, plain_files):
     for e_id in all_edges:
         if not all_edges[e_id]["needs_node"]:
             continue
-        new_nodes.append(xmlNodeClass(["newNode"+str(glbl_cntr_get_next()), "priority", all_edges[e_id]["x_i"], all_edges[e_id]["y_i"]],{}))
+        new_nodes.append(xmlNodeClass(["Node"+uuid.uuid4().hex, "priority", all_edges[e_id]["x_i"], all_edges[e_id]["y_i"]],{}))
     loaded_nodes.node = loaded_nodes.node + new_nodes
     
     deleted_node_id = None
@@ -396,7 +389,7 @@ def create_new_edges(node_id, node_x, node_y, node_r, new_nodes, all_edges, plai
         shape_str = ""
         for x,y in shape:
             shape_str += "{},{} ".format(x, y)
-        new_edge = xmlEdgeClass(["tram rail_urban rail rail_electric ship", sid, "newEdge"+str(glbl_cntr_get_next()), "1", "9", shape_str, "13.89", eid, "highway.primary"], {})
+        new_edge = xmlEdgeClass(["tram rail_urban rail rail_electric ship", sid, "Edge"+uuid.uuid4().hex, "1", "9", shape_str, "13.89", eid, "highway.primary"], {})
         new_edges.append(new_edge)
     
     loaded_edges.edge = loaded_edges.edge + new_edges
@@ -492,7 +485,7 @@ def create_new_node_and_delete_old_nodes(new_node_x, new_node_y, roundabout_node
     
     loaded_nodes = list(sumolib.xml.parse(plain_files["nod"], "nodes"))[0]
     
-    new_node = xmlNodeClass(["newNode"+str(glbl_cntr_get_next()), "priority", new_node_x, new_node_y],{})
+    new_node = xmlNodeClass(["Node"+uuid.uuid4().hex, "priority", new_node_x, new_node_y],{})
     
     loaded_nodes.node = loaded_nodes.node + [new_node]
     
