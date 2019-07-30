@@ -66,7 +66,65 @@ def cnvt_plain_to_net(netcnvt_bin, plain_files, new_net_path, verbose):
         print(str(res.stderr, "utf-8"), file=sys.stderr)
         print(str(res.stdout, "utf-8"))
         print("***")
+
+def get_all_nodes(plain_files):
+    loaded_nodes = list(sumolib.xml.parse(plain_files["nod"], "nodes"))[0]
+    net_nodes = dict()
+    if not loaded_nodes.node:
+        return net_nodes
+    for node in loaded_nodes.node:
+        net_nodes[node.id] = node
+    return net_nodes
     
+def get_all_edges(plain_files):
+    loaded_edges = list(sumolib.xml.parse(plain_files["edg"], "edges"))[0]
+    net_edges = dict()
+    if not loaded_edges.edge:
+        return net_edges
+    for edge in loaded_edges.edge:
+        net_edges[edge.id] = edge
+    return net_edges
+    
+def get_all_connections(plain_files):
+    loaded_connections = list(sumolib.xml.parse(plain_files["con"], "connections"))[0]
+    net_connections = list()
+    if not loaded_connections.connection:
+        return net_connections
+    for connection in loaded_connections.connection:
+        net_connections.append(connection)
+    return net_connections
+
+def get_all_roundabouts(plain_files):
+    loaded_edges = list(sumolib.xml.parse(plain_files["edg"], "edges"))[0]
+    net_roundabouts = list()
+    if not loaded_edges.roundabout:
+        return net_roundabouts
+    for roundabout in loaded_edges.roundabout:
+        net_roundabouts.append(roundabout)
+    return net_roundabouts
+
+def get_incoming(node_id, net_edges):
+    incoming = list()
+    for _, e in net_edges.items():
+        if e.to == node_id:
+            incoming.append(e)
+    return incoming
+
+def get_outgoing(node_id, net_edges):
+    outgoing = list()
+    for e_id, e in net_edges.items():
+        if e.attr_from == node_id:
+            outgoing.append(e)
+    return outgoing
+
+def edge_get_shape(edge):
+    shape = list()
+    for coord_pair in edge.shape.split(" "):
+        if coord_pair:
+            x,y = coord_pair.split(",")
+            shape.append((float(x),float(y)))
+    return shape
+
 #Create temporary file
 def get_tmp_file_for_patch(tmpd):
     tmpf = tempfile.mkstemp(prefix="patch_", suffix=".xml", dir=tmpd, text=True)
@@ -89,46 +147,53 @@ def get_new_edge_shapes(inc, out, my_node, node_r):
     
     modified_edges = dict()
     
-    #find matching edges (opposite directions)
-    pairs = []
-    for i in inc:
-        p = [i]
-        for o in out:
-            if i.getFromNode() == o.getToNode():
-                p.append(o)
-        pairs.append(p)
+    edges = []
     
-    node_x, node_y = my_node.getCoord()
-    for pair in pairs:
-        for edge in pair:
-            match = pair[0].getID() if edge.getID() == pair[1].getID() else pair[1].getID()
-            is_incoming = False if edge.getID() == pair[1].getID() else True
-            edge_shape = edge.getRawShape()
-            nearest_x = float("inf")
-            nearest_y = float("inf")
-            nearest_dist = float("inf")
+    for i in inc:
+        edges.append((i, True))
+        
+        pair=None
+        for o in out:
+            if o.to == i.attr_from and o.attr_from == i.to:
+                pair = o
+                break
+        if pair:
+            edges.append((pair, False))
+            out.remove(pair)
             
-            new_shape=[]
-            for x, y in edge_shape:
-                dist = math.sqrt( (x - node_x)**2 + (y - node_y)**2 )
-                
-                if dist > node_r:
-                    new_shape.append((x,y))
-                
-                if dist > node_r and dist < nearest_dist:
-                    nearest_x = x
-                    nearest_y = y
-                    nearest_dist = dist
-                    
-            #get new end coord
-            x_i, y_i = get_intersection(nearest_x, nearest_y, node_x, node_y, node_r)
-            #insert the coords at the right end of the list (prior or after the closes existing coord)
-            if math.sqrt( (x_i - new_shape[0][0])**2 + (y_i - new_shape[0][1])**2 ) < math.sqrt( (x_i - new_shape[-1][0])**2 + (y_i - new_shape[-1][1])**2 ):
-                new_shape.insert(0, (x_i, y_i))
-            else:
-                new_shape.append((x_i,y_i))
+    for o in out:
+        edges.append((o, True))
+    
+    node_x, node_y = float(my_node.x), float(my_node.y)
+    
+    for edge, needs_node in edges:
             
-            modified_edges[edge.getID()] = {"nearest_x" : nearest_x, "nearest_y" : nearest_y, "nearest_dist" : nearest_dist, "new_shape" : new_shape, "match" : match, "is_incoming" : is_incoming, "x_i" : x_i, "y_i" : y_i}
+        edge_shape = edge_get_shape(edge)
+        nearest_x = float("inf")
+        nearest_y = float("inf")
+        nearest_dist = float("inf")
+        
+        new_shape=[]
+        for x, y in edge_shape:
+            dist = math.sqrt( (x - node_x)**2 + (y - node_y)**2 )
+            
+            if dist > node_r:
+                new_shape.append((x,y))
+            
+            if dist > node_r and dist < nearest_dist:
+                nearest_x = x
+                nearest_y = y
+                nearest_dist = dist
+                
+        #get new end coord
+        x_i, y_i = get_intersection(nearest_x, nearest_y, node_x, node_y, node_r)
+        #insert the coords at the right end of the list (prior or after the closes existing coord)
+        if math.sqrt( (x_i - new_shape[0][0])**2 + (y_i - new_shape[0][1])**2 ) < math.sqrt( (x_i - new_shape[-1][0])**2 + (y_i - new_shape[-1][1])**2 ):
+            new_shape.insert(0, (x_i, y_i))
+        else:
+            new_shape.append((x_i,y_i))
+        
+        modified_edges[edge.id] = {"nearest_x" : nearest_x, "nearest_y" : nearest_y, "nearest_dist" : nearest_dist, "new_shape" : new_shape, "needs_node" : needs_node, "x_i" : x_i, "y_i" : y_i}
     #return dict with key = id
     return modified_edges
 
@@ -244,7 +309,7 @@ def create_new_nodes_and_delete_old_node(node_id, all_edges, plain_files):
     
     new_nodes = []
     for e_id in all_edges:
-        if not all_edges[e_id]["is_incoming"]:
+        if not all_edges[e_id]["needs_node"]:
             continue
         new_nodes.append(xmlNodeClass(["newNode"+str(glbl_cntr_get_next()), "priority", all_edges[e_id]["x_i"], all_edges[e_id]["y_i"]],{}))
     loaded_nodes.node = loaded_nodes.node + new_nodes
@@ -346,7 +411,10 @@ def create_new_edges(node_id, node_x, node_y, node_r, new_nodes, all_edges, plai
         roundabout_node_str = "{} {}".format(roundabout_node_str, n.id)
     
     new_roundabout = xmlRoundaboutClass([roundabout_edge_str, roundabout_node_str],{})
-    loaded_edges.roundabout += [new_roundabout]
+    if loaded_edges.roundabout:
+        loaded_edges.roundabout += [new_roundabout]
+    else:
+        loaded_edges.roundabout = [new_roundabout]
     
     #write to file
     with open(plain_files["edg"], "w") as file_handle:
@@ -354,16 +422,15 @@ def create_new_edges(node_id, node_x, node_y, node_r, new_nodes, all_edges, plai
     
     return new_edges
 
-def delete_unneeded_connections(net, deleted_node_id, plain_files):
+def delete_unneeded_connections(net_nodes, net_edges, deleted_node_id, plain_files):
     loaded_connections = list(sumolib.xml.parse(plain_files["con"], "connections"))[0]
     
-    deleted_node = net.getNode(deleted_node_id)
-    
-    inc = deleted_node.getIncoming()
-    out = deleted_node.getOutgoing()
+    deleted_node = net_nodes[deleted_node_id]
+    inc = get_incoming(deleted_node_id, net_edges)
+    out = get_outgoing(deleted_node_id, net_edges)
     relevant_edges = []
     for e in inc + out:
-        relevant_edges.append(e.getID())
+        relevant_edges.append(e.id)
     
         keep_connections = []
         for connection in loaded_connections.connection:
@@ -378,29 +445,35 @@ def delete_unneeded_connections(net, deleted_node_id, plain_files):
     return True
 
 def change_node_to_roundabout(change_node_id_to_roundabout, path, plain_files, radius = 20):
-    net = sumolib.net.readNet(str(path))
+    #net = sumolib.net.readNet(str(path))
+    net_nodes = get_all_nodes(plain_files)
+    net_edges = get_all_edges(plain_files)
+    net_connections = get_all_connections(plain_files)
+    net_roundabouts = get_all_roundabouts(plain_files)
     
-    my_node = net.getNode(change_node_id_to_roundabout)
-    node_x, node_y = my_node.getCoord()
+    my_node = net_nodes[change_node_id_to_roundabout]
+    node_x, node_y = float(my_node.x), float(my_node.y)
     node_r = radius
-    node_id = my_node.getID()
+    node_id = my_node.id
     
     #Change relevant edges
-    all_edges = get_new_edge_shapes(my_node.getIncoming(), my_node.getOutgoing(), my_node, node_r)
+    all_edges = get_new_edge_shapes(get_incoming(node_id, net_edges), get_outgoing(node_id, net_edges), my_node, node_r)
     
     #Create needed new nodes, writing them directly to file
     new_nodes, deleted_node_id = create_new_nodes_and_delete_old_node(node_id, all_edges, plain_files)
     
     new_edges = create_new_edges(node_id, node_x, node_y, node_r, new_nodes, all_edges, plain_files)
     
-    delete_unneeded_connections(net, deleted_node_id, plain_files)
+    delete_unneeded_connections(net_nodes, net_edges, deleted_node_id, plain_files)
 
 def get_roundabout_center(roundabout_nodes):
     A, B, C, *_ = roundabout_nodes
-    xA,yA = roundabout_nodes[A].getCoord()
-    xB,yB = roundabout_nodes[B].getCoord()
-    xC,yC = roundabout_nodes[C].getCoord()
-    
+    xA = float(roundabout_nodes[A].x)
+    yA = float(roundabout_nodes[A].y)
+    xB = float(roundabout_nodes[B].x)
+    yB = float(roundabout_nodes[B].y)
+    xC = float(roundabout_nodes[C].x)
+    yC = float(roundabout_nodes[C].y)
     d_x_1 = xB - xA
     d_y_1 = yB - yA
     d_x_2 = xC - xB
@@ -438,27 +511,27 @@ def create_new_node_and_delete_old_nodes(new_node_x, new_node_y, roundabout_node
     
     return new_node, deleted_node_ids
 
-def change_shapes_and_connected_nodes(roundabout_nodes, roundabout_edges, new_node):
+def change_shapes_and_connected_nodes(roundabout_nodes, roundabout_edges, net_edges, new_node):
     modified_edges = dict()
     
     external_edges=[]
     for n_id in roundabout_nodes:
         node  = roundabout_nodes[n_id]
-        all_edges = node.getIncoming() + node.getOutgoing()
-        external_edges += list(filter(lambda x : x.getID() not in roundabout_edges, all_edges))
+        all_edges = get_incoming(node.id, net_edges) + get_outgoing(node.id, net_edges)
+        external_edges += list(filter(lambda x : x.id not in roundabout_edges, all_edges))
         
     for edge in external_edges:
-        new_shape = edge.getRawShape()
-        if edge.getFromNode().getID() in roundabout_nodes:
+        new_shape = edge_get_shape(edge)
+        if edge.attr_from in roundabout_nodes:
             from_node = new_node.id
-            to_node = edge.getToNode().getID()
+            to_node = edge.to
             new_shape.insert(0, (new_node.x, new_node.y))
-        elif edge.getToNode().getID() in roundabout_nodes:
+        elif edge.to in roundabout_nodes:
             to_node = new_node.id
-            from_node = edge.getFromNode().getID()
+            from_node = edge.attr_from
             new_shape.append((new_node.x, new_node.y))
             
-        modified_edges[edge.getID()] = {"from_node": from_node, "to_node": to_node, "new_shape": new_shape}
+        modified_edges[edge.id] = {"from_node": from_node, "to_node": to_node, "new_shape": new_shape}
         
     return modified_edges
 
@@ -522,22 +595,24 @@ def delete_connections_belonging_to_removed_edges(deleted_edge_ids, plain_files)
     return True
 
 def change_roundabout_to_node(roundabout_edge_ids, roundabout_node_ids, path, plain_files):
-    net = sumolib.net.readNet(str(path))
+    net_nodes = get_all_nodes(plain_files)
+    net_edges = get_all_edges(plain_files)
+    net_connections = get_all_connections(plain_files)
+    net_roundabouts = get_all_roundabouts(plain_files)
     
-    #identify external edges
     roundabout_nodes = dict()
     for n_id in roundabout_node_ids:
-        roundabout_nodes[n_id] = net.getNode(n_id)
+        roundabout_nodes[n_id] = net_nodes[n_id]
     
     roundabout_edges = dict()
     for e_id in roundabout_edge_ids:
-        roundabout_edges[e_id] = net.getEdge(e_id)
+        roundabout_edges[e_id] = net_edges[e_id]
     
     new_node_x, new_node_y = get_roundabout_center(roundabout_nodes)
     
     new_node, deleted_node_ids = create_new_node_and_delete_old_nodes(new_node_x, new_node_y, roundabout_nodes, plain_files)
     
-    modified_edges = change_shapes_and_connected_nodes(roundabout_nodes, roundabout_edges, new_node)
+    modified_edges = change_shapes_and_connected_nodes(roundabout_nodes, roundabout_edges, net_edges, new_node)
     
     deleted_edge_ids = delete_unneeded_edges_and_roundabout(modified_edges, roundabout_edges, roundabout_nodes, plain_files)
     
