@@ -78,6 +78,8 @@ def main():
     new_net_path = Path(param_new_net_path).resolve()
     
     change_node_to_roundabout("498751220", net_path, plain_files)
+    change_roundabout_to_node(["26697422#0","26697422#1","26697422#2"], ["292785669","292785688","76182923"], net_path, plain_files)
+    
     cnvt_plain_to_net(netcnvt_bin, plain_files, new_net_path, switch_verbose)
     
     

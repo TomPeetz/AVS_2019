@@ -346,6 +346,7 @@ def create_new_edges(node_id, node_x, node_y, node_r, new_nodes, all_edges, plai
         roundabout_node_str = "{} {}".format(roundabout_node_str, n.id)
     
     new_roundabout = xmlRoundaboutClass([roundabout_edge_str, roundabout_node_str],{})
+    loaded_edges.roundabout += [new_roundabout]
     
     #write to file
     with open(plain_files["edg"], "w") as file_handle:
@@ -393,3 +394,152 @@ def change_node_to_roundabout(change_node_id_to_roundabout, path, plain_files, r
     new_edges = create_new_edges(node_id, node_x, node_y, node_r, new_nodes, all_edges, plain_files)
     
     delete_unneeded_connections(net, deleted_node_id, plain_files)
+
+def get_roundabout_center(roundabout_nodes):
+    A, B, C, *_ = roundabout_nodes
+    xA,yA = roundabout_nodes[A].getCoord()
+    xB,yB = roundabout_nodes[B].getCoord()
+    xC,yC = roundabout_nodes[C].getCoord()
+    
+    d_x_1 = xB - xA
+    d_y_1 = yB - yA
+    d_x_2 = xC - xB
+    d_y_2 = yC - yB
+    
+    s1 = d_y_1 / d_x_1
+    s2 = d_y_2 / d_x_2
+    
+    cx = ( s1*s2*(yA - yC) + s2*(xA + xB) - s1*(xB + xC) ) / ( 2 * (s2 - s1) )
+    cy = -1 * ( cx - (xA + xB) /2 ) / s1 + (yA + yB)/2
+    
+    return (cx, cy)
+    
+def create_new_node_and_delete_old_nodes(new_node_x, new_node_y, roundabout_nodes, plain_files):
+    xmlNodeClass = sumolib.xml.compound_object("node", ["id", "type", "x", "y"])
+    
+    loaded_nodes = list(sumolib.xml.parse(plain_files["nod"], "nodes"))[0]
+    
+    new_node = xmlNodeClass(["newNode"+str(glbl_cntr_get_next()), "priority", new_node_x, new_node_y],{})
+    
+    loaded_nodes.node = loaded_nodes.node + [new_node]
+    
+    keep_nodes = []
+    deleted_node_ids = []
+    
+    for node in loaded_nodes.node:
+        if node.id in roundabout_nodes:
+            deleted_node_ids.append(node.id)
+            continue
+        keep_nodes.append(node)
+    loaded_nodes.node = keep_nodes
+    
+    with open(plain_files["nod"], "w") as file_handle:
+        file_handle.write(loaded_nodes.toXML())
+    
+    return new_node, deleted_node_ids
+
+def change_shapes_and_connected_nodes(roundabout_nodes, roundabout_edges, new_node):
+    modified_edges = dict()
+    
+    external_edges=[]
+    for n_id in roundabout_nodes:
+        node  = roundabout_nodes[n_id]
+        all_edges = node.getIncoming() + node.getOutgoing()
+        external_edges += list(filter(lambda x : x.getID() not in roundabout_edges, all_edges))
+        
+    for edge in external_edges:
+        new_shape = edge.getRawShape()
+        if edge.getFromNode().getID() in roundabout_nodes:
+            from_node = new_node.id
+            to_node = edge.getToNode().getID()
+            new_shape.insert(0, (new_node.x, new_node.y))
+        elif edge.getToNode().getID() in roundabout_nodes:
+            to_node = new_node.id
+            from_node = edge.getFromNode().getID()
+            new_shape.append((new_node.x, new_node.y))
+            
+        modified_edges[edge.getID()] = {"from_node": from_node, "to_node": to_node, "new_shape": new_shape}
+        
+    return modified_edges
+
+def delete_unneeded_edges_and_roundabout(modified_edges, roundabout_edges, roundabout_nodes, plain_files):
+    xmlEdgeClass = sumolib.xml.compound_object("edge", ["id", "from", "to", "priority", "type", "numLanes", "speed", "shape", "disallow"])
+    xmlRoundaboutClass = sumolib.xml.compound_object("roundabout", ["nodes", "edges"])
+    
+    loaded_edges = list(sumolib.xml.parse(plain_files["edg"], "edges"))[0]
+    
+    for edge in loaded_edges.edge:
+        if edge.id in modified_edges:
+            new_shape = ""
+            for x,y in modified_edges[edge.id]["new_shape"]:
+                new_shape += "{},{} ".format(x, y)
+            edge.shape=new_shape
+            edge.to = modified_edges[edge.id]["to_node"]
+            edge.attr_from = modified_edges[edge.id]["from_node"]
+            
+            
+    deleted_edge_ids = []
+    keep_edges = []
+    for edge in loaded_edges.edge:
+        if edge.id in roundabout_edges:
+            deleted_edge_ids.append(edge.id)
+            continue
+        keep_edges.append(edge)
+    loaded_edges.edge = keep_edges
+    
+    keep_roundabouts = []
+    for roundabout in loaded_edges.roundabout:
+        delete = True
+        for n_id in roundabout.nodes.split(" "):
+            if n_id not in roundabout_nodes:
+                delete = False
+        for e_id in roundabout.edges.split(" "):
+            if e_id not in roundabout_edges:
+                delete = False
+        if delete:
+            continue
+        keep_roundabouts.append(roundabout)
+    loaded_edges.roundabout = keep_roundabouts
+    
+    #write to file
+    with open(plain_files["edg"], "w") as file_handle:
+        file_handle.write(loaded_edges.toXML())
+        
+    return deleted_edge_ids
+
+def delete_connections_belonging_to_removed_edges(deleted_edge_ids, plain_files):
+    loaded_connections = list(sumolib.xml.parse(plain_files["con"], "connections"))[0]
+    
+    keep_connections = []
+    for connection in loaded_connections.connection:
+        if connection.attr_from in deleted_edge_ids or connection.to in deleted_edge_ids:
+            continue
+        keep_connections.append(connection)
+    loaded_connections.connection = keep_connections
+    
+    with open(plain_files["con"], "w") as file_handle:
+        file_handle.write(loaded_connections.toXML())
+    return True
+
+def change_roundabout_to_node(roundabout_edge_ids, roundabout_node_ids, path, plain_files):
+    net = sumolib.net.readNet(str(path))
+    
+    #identify external edges
+    roundabout_nodes = dict()
+    for n_id in roundabout_node_ids:
+        roundabout_nodes[n_id] = net.getNode(n_id)
+    
+    roundabout_edges = dict()
+    for e_id in roundabout_edge_ids:
+        roundabout_edges[e_id] = net.getEdge(e_id)
+    
+    new_node_x, new_node_y = get_roundabout_center(roundabout_nodes)
+    
+    new_node, deleted_node_ids = create_new_node_and_delete_old_nodes(new_node_x, new_node_y, roundabout_nodes, plain_files)
+    
+    modified_edges = change_shapes_and_connected_nodes(roundabout_nodes, roundabout_edges, new_node)
+    
+    deleted_edge_ids = delete_unneeded_edges_and_roundabout(modified_edges, roundabout_edges, roundabout_nodes, plain_files)
+    
+    delete_connections_belonging_to_removed_edges(deleted_edge_ids, plain_files)
+    
