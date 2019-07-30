@@ -156,6 +156,88 @@ def get_nearest_node_id(x, y, nodes):
         
     return nearest_id
 
+def get_sectors(cx, cy, r):
+    xA = cx + r * math.cos(0)
+    yA = cy + r * math.sin(0)
+    xB = cx + r * math.cos(math.pi/2)
+    yB = cy + r * math.sin(math.pi/2)
+    xC = cx + r * math.cos(math.pi)
+    yC = cy + r * math.sin(math.pi)
+    xD = cx + r * math.cos(3*math.pi/2)
+    yD = cy + r * math.sin(3*math.pi/2)
+    
+    return (xA, yA, xB, yB, xC, yC, xD, yD)
+
+def in_sector_and_distance_from(x, y, xS):
+    xA, yA, xB, yB, xC, yC, xD, yD = xS
+    
+    if y >= yA and x > xB:
+        d = math.sqrt( (x - xA)**2 + (y - yA)**2 )
+        return (1,d)
+    if x <= xB and y > yC:
+        d = math.sqrt( (x - xB)**2 + (y - yB)**2 )
+        return (2,d)
+    if y <= yC and x < xD:
+        d = math.sqrt( (x - xC)**2 + (y - yC)**2 )
+        return (3,d)
+    if x >= xD and y < yA:
+        d = math.sqrt( (x - xD)**2 + (y - yD)**2 )
+        return (4,d)
+    return None
+    
+def order_on_circle(c,xS):
+    start=None
+    inA=[]
+    inB=[]
+    inC=[]
+    inD=[]
+    
+    for p in c:
+        x,y,*_ = p
+        s, d = in_sector_and_distance_from(x, y, xS)
+        if s == 1:
+            inA.append((*p, d))
+        if s == 2:
+            inB.append((*p, d))
+        if s == 3:
+            inC.append((*p, d))
+        if s == 4:
+            inD.append((*p, d))
+    
+    inA.sort(key=lambda x : x[-1])
+    inB.sort(key=lambda x : x[-1])
+    inC.sort(key=lambda x : x[-1])
+    inD.sort(key=lambda x : x[-1])
+    l = inA+inB+inC+inD
+    return l
+
+def get_theta_on_circle(r, x, y, xS):
+    xA, yA, xB, yB, xC, yC, xD, yD = xS
+    
+    s,_ = in_sector_and_distance_from(x, y, xS)
+    x0 = xA
+    y0 = yA
+    theta=0
+    if s == 2:
+        x0 = xB
+        y0 = yB
+        theta = math.pi/2
+    if s == 3:
+        x0 = xC
+        y0 = yC
+        theta = math.pi
+    if s == 4:
+        x0 = xD
+        y0 = yD
+        theta = 3*math.pi/2
+        
+    c = math.sqrt( (x - x0)**2 + (y - y0)**2 )
+    if c != 0:
+        add = 2 * math.asin( c / (2*r) )
+        theta += add
+    
+    return theta
+
 def experiment(path, plain_files, net_path, new_net_path, netcnvt_bin, verbose):
     net = sumolib.net.readNet(str(path))
     
@@ -215,17 +297,56 @@ def experiment(path, plain_files, net_path, new_net_path, netcnvt_bin, verbose):
     
     
     for edge in loaded_edges.edge:
-        
         if edge.attr_from == node_id:
             edge.attr_from = get_nearest_node_id(all_edges[edge.id]["nearest_x"], all_edges[edge.id]["nearest_y"], new_nodes)
         elif edge.to == node_id:
             edge.to = get_nearest_node_id(all_edges[edge.id]["nearest_x"], all_edges[edge.id]["nearest_y"], new_nodes)
         
+    xS = get_sectors(node_x, node_y, node_r)
+    step=(2*math.pi)/40
+    nodes_e = []
     for node in new_nodes:
-        pprint(node)
+        nodes_e.append( (float(node.x), float(node.y), node.id) )
+    nodes_e = order_on_circle(nodes_e, xS)
+    
+    new_edges=[]
+    for i in range(len(nodes_e)):
+        sx, sy, sid, *_ = nodes_e[i]
+        ex, ey, eid, *_ = nodes_e[(i+1) % len(nodes_e)]
         
+        s_arc = get_theta_on_circle(node_r, sx, sy, xS)
+        e_arc = get_theta_on_circle(node_r, ex, ey, xS)
+        
+        shape=[]
+        arc = s_arc
+        print("*****")
+        if e_arc < s_arc:
+            e_arc_tmp = 2*math.pi
+            arc = s_arc
+            while arc < e_arc_tmp:
+                # ~ pprint(math.degrees(arc))
+                shape_x = node_x + node_r * math.cos(arc)
+                shape_y = node_y + node_r * math.sin(arc)
+                arc += step
+                shape.append((shape_x,shape_y))
+            arc = 0
+        pprint(math.degrees(e_arc))
+        while arc < e_arc:
+            # ~ pprint(math.degrees(arc))
+            shape_x = node_x + node_r * math.cos(arc)
+            shape_y = node_y + node_r * math.sin(arc)
+            arc += step
+            shape.append((shape_x,shape_y))
+        
+        # ~ pprint("**")
+        # ~ pprint(shape)
+        shape_str = ""
+        for x,y in shape:
+            shape_str += "{},{} ".format(x, y)
+        new_edge = xmlEdgeClass(["tram rail_urban rail rail_electric ship", sid, "newEdge"+str(i), "1", "9", shape_str, "13.89", eid, "highway.primary"], {})
+        new_edges.append(new_edge)
     
-    
+    loaded_edges.edge = loaded_edges.edge + new_edges
     with open(plain_files["edg"], "w") as file_handle:
         file_handle.write(loaded_edges.toXML())
     
