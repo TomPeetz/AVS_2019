@@ -268,10 +268,11 @@ def experiment(path, plain_files, net_path, new_net_path, netcnvt_bin, verbose):
         i+=1
     loaded_nodes.node = loaded_nodes.node + new_nodes
     
-    
+    deleted_node_id = None
     keep_nodes = []
     for node in loaded_nodes.node:
         if node.id == node_id:
+            deleted_node_id = node.id
             continue
         keep_nodes.append(node)
     loaded_nodes.node = keep_nodes
@@ -287,6 +288,7 @@ def experiment(path, plain_files, net_path, new_net_path, netcnvt_bin, verbose):
     #################
     loaded_edges = list(sumolib.xml.parse(plain_files["edg"], "edges"))[0]
     xmlEdgeClass = sumolib.xml.compound_object("edge", ["id", "from", "to", "priority", "type", "numLanes", "speed", "shape", "disallow"])
+    
     #Change Shape
     for edge in loaded_edges.edge:
         if edge.id in all_edges:
@@ -324,22 +326,17 @@ def experiment(path, plain_files, net_path, new_net_path, netcnvt_bin, verbose):
             e_arc_tmp = 2*math.pi
             arc = s_arc
             while arc < e_arc_tmp:
-                # ~ pprint(math.degrees(arc))
                 shape_x = node_x + node_r * math.cos(arc)
                 shape_y = node_y + node_r * math.sin(arc)
                 arc += step
                 shape.append((shape_x,shape_y))
             arc = 0
-        pprint(math.degrees(e_arc))
         while arc < e_arc:
-            # ~ pprint(math.degrees(arc))
             shape_x = node_x + node_r * math.cos(arc)
             shape_y = node_y + node_r * math.sin(arc)
             arc += step
             shape.append((shape_x,shape_y))
         
-        # ~ pprint("**")
-        # ~ pprint(shape)
         shape_str = ""
         for x,y in shape:
             shape_str += "{},{} ".format(x, y)
@@ -347,6 +344,20 @@ def experiment(path, plain_files, net_path, new_net_path, netcnvt_bin, verbose):
         new_edges.append(new_edge)
     
     loaded_edges.edge = loaded_edges.edge + new_edges
+    
+    xmlRoundaboutClass = sumolib.xml.compound_object("roundabout", ["nodes", "edges"])
+    
+    roundabout_edge_str = ""
+    for e in new_edges:
+        roundabout_edge_str = "{} {}".format(roundabout_edge_str, e.id)
+        
+    roundabout_node_str = ""
+    for n in new_nodes:
+        roundabout_node_str = "{} {}".format(roundabout_node_str, n.id)
+    
+    new_roundabout = xmlRoundaboutClass([roundabout_edge_str, roundabout_node_str],{})
+    
+    
     with open(plain_files["edg"], "w") as file_handle:
         file_handle.write(loaded_edges.toXML())
     
@@ -361,25 +372,23 @@ def experiment(path, plain_files, net_path, new_net_path, netcnvt_bin, verbose):
     #################
     loaded_connections = list(sumolib.xml.parse(plain_files["con"], "connections"))[0]
     
-    # ~ node_to_del = net.getNode(node_id)
+    deleted_node = net.getNode(deleted_node_id)
     
-    # ~ inc = node_to_del.getIncoming()
-    # ~ out = node_to_del.getOutgoing()
-    # ~ relevant_edges = []
-    # ~ for e in inc + out:
-        # ~ relevant_edges.append(e.getID())
+    inc = deleted_node.getIncoming()
+    out = deleted_node.getOutgoing()
+    relevant_edges = []
+    for e in inc + out:
+        relevant_edges.append(e.getID())
     
-    # ~ if False:
-        # ~ new_connections = []
-        # ~ for connection in loaded_connections.connection:
-            # ~ #pprint(connection)
-            # ~ if connection.attr_from in relevant_edges and connection.to in relevant_edges:
-                # ~ pprint(connection)
-            # ~ else:
-                # ~ new_connections.append(connection)
-        # ~ loaded_connections.connection = new_connections
+        keep_connections = []
+        for connection in loaded_connections.connection:
+            #pprint(connection)
+            if connection.attr_from in relevant_edges and connection.to in relevant_edges:
+                continue
+            keep_connections.append(connection)
+        loaded_connections.connection = keep_connections
     
-    loaded_connections.connection=[]
+    # ~ loaded_connections.connection=[]
     
     with open(plain_files["con"], "w") as file_handle:
         file_handle.write(loaded_connections.toXML())
