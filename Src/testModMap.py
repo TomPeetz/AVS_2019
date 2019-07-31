@@ -10,6 +10,7 @@ from ModMap import *
 from pathlib import Path
 import sys
 import getopt
+import time
 
 def usage(p):
     print("Benutzung: {0} -h (Hilfe) | <Optionen>".format(p))
@@ -93,12 +94,47 @@ def main():
     
     
     print("*****************")
-    change_node_to_roundabout("cluster_1458992876_1458992877", net_path, plain_files)
-    change_roundabout_to_node(["199657059#1", "199657059#2", "199657059#3", "199657059#4","199657059#5", "199657059#6", "199657059#7", "199657059#8"], ["1458992905", "1458992917", "3269007882", "3269007888","3269007896", "3269007898", "3269007902", "3269007903"], net_path, plain_files)
-     
- 
-    print("****************")
+    
+    pprint("Laden...")
+    pprint(time.monotonic())
+    nr = Net_Repr(plain_files)
+    pprint(time.monotonic())
+    
+    #Koeln
+    pprint("Hack...")
+    pprint(time.monotonic())
+    hack_for_cologne(plain_files)
+    pprint(time.monotonic())
+    
+    pprint("Modifizieren...")
+    pprint(time.monotonic())
+    change_node_to_roundabout("cluster_1458992876_1458992877", nr)
+    change_roundabout_to_node("199657059#1 199657059#2 199657059#3 199657059#4 199657059#5 199657059#6 199657059#7 199657059#8", "1458992905 1458992917 3269007882 3269007888 3269007896 3269007898 3269007902 3269007903", nr)
+    change_node_to_roundabout("287597242", nr)
+    change_node_to_roundabout("267850246", nr)
+    change_node_to_roundabout("1458680282", nr)
+    change_node_to_roundabout("1458680380", nr)
+    change_node_to_roundabout("1458680174", nr)
+    change_node_to_roundabout("1458680125", nr)
+    change_node_to_roundabout("1458680475", nr)
+    pprint(time.monotonic())
+    
+    #Minimal
+    # ~ change_node_to_roundabout("498751220", nr)
+    # ~ change_node_to_roundabout("996951907", nr)
+    # ~ change_node_to_roundabout("996951809", nr)
+    # ~ change_node_to_roundabout("cluster_498751183_996951775", nr)
+    # ~ change_roundabout_to_node("26697422#0 26697422#1 26697422#2", "292785669 292785688 76182923", nr)
+    
+    pprint("Schreiben...")
+    pprint(time.monotonic())
+    nr.write_to_plain()
+    pprint(time.monotonic())
+    
+    print("*****************")
     cnvt_plain_to_net(netcnvt_bin, plain_files, new_net_path, switch_verbose)
+    
+    #cnvt_plain_to_net(netcnvt_bin, plain_files, new_net_path, switch_verbose)
     
     
     if not switch_keep_temp:
