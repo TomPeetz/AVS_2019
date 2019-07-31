@@ -1,8 +1,17 @@
-import sumolib
 import json
 from os import path
 
-netxml = path.abspath(path.join("..", "..", "Experimente/Netconvert_Mit_Python/Maps/Minimal/SUMO_Netz/minimal.net.xml"))
+import os, sys
+
+if 'SUMO_HOME' in os.environ:
+    tools = os.path.join(os.environ['SUMO_HOME'], 'tools')
+    sys.path.append(tools)
+else:
+    sys.exit("please declare environment variable 'SUMO_HOME'")
+
+import sumolib
+
+netxml = path.abspath(path.join("..", "Experimente/Netconvert_Mit_Python/Maps/Minimal/SUMO_Netz/minimal.net.xml"))
 net = sumolib.net.readNet(str(netxml))
 
 nodes = net.getNodes()

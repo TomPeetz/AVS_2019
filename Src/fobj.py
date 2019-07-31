@@ -47,7 +47,7 @@ def prepare(x, debug):
 
     trips = path.join(tmpsim, 'trips.trips.xml')
 
-    subprocess.Popen(args = ['/usr/share/sumo/tools/randomTrips.py', '-n', modifiednet, '-o', trips]).wait()
+    subprocess.Popen(args = [os.path.join(os.environ['SUMO_HOME'], 'tools', 'randomTrips.py'), '-n', modifiednet, '-o', trips]).wait()
 
     return path.join(tmpsim, 'test.sumocfg')
 

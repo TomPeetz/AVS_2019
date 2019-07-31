@@ -4,8 +4,6 @@ Benötigt wird: openmpi, sumo, libpython
 
 Ebenfalls alle in requirements.txt genannten python packages
 
-Das script randomTrips.py von sumo in /usr/share/sumo/tools/
-
 Zuerst wird für die genutzte Karte der Search Space erzeugt
 
 ```
