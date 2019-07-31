@@ -78,11 +78,11 @@ def main():
     new_net_path = Path(param_new_net_path).resolve()
     
     #A
-    change_roundabout_to_node(["26697422#0","26697422#1","26697422#2"], ["292785669","292785688","76182923"], net_path, plain_files)
-    change_node_to_roundabout("498751220", net_path, plain_files)
-    change_node_to_roundabout("cluster_498751183_996951775", net_path, plain_files)
-    change_node_to_roundabout("996951907", net_path, plain_files)
-    change_node_to_roundabout("996951809", net_path, plain_files)
+    # ~ change_roundabout_to_node(["26697422#0","26697422#1","26697422#2"], ["292785669","292785688","76182923"], net_path, plain_files)
+    # ~ change_node_to_roundabout("498751220", net_path, plain_files)
+    # ~ change_node_to_roundabout("cluster_498751183_996951775", net_path, plain_files)
+    # ~ change_node_to_roundabout("996951907", net_path, plain_files)
+    # ~ change_node_to_roundabout("996951809", net_path, plain_files)
     
     #B
     # ~ change_roundabout_to_node(["Edge20f6c6a95e204dd99f62efb1866f3002","Edge3d7222dcbda24ed4be98e935738b2e13","Edge6f6073efa02746de98b090434ffab635","Edgec8ec2c924765497ba1f2a3728c7d871d"], ["Node06bf3b82c14c436e93cc5b9deee9e002","Node122bc02d676a438e9501e5fb38305d22","Node137942f40ce548c5b3f2471fcf963d0f","Nodeb2a27d4a77674d22a93bfb54390f18e0"], net_path, plain_files)
@@ -92,6 +92,12 @@ def main():
     # ~ change_node_to_roundabout("Node8ec8db3c99294cc7ba46928b452e0f6f", net_path, plain_files)
     
     
+    print("*****************")
+    change_node_to_roundabout("cluster_1458992876_1458992877", net_path, plain_files)
+    change_roundabout_to_node(["199657059#1", "199657059#2", "199657059#3", "199657059#4","199657059#5", "199657059#6", "199657059#7", "199657059#8"], ["1458992905", "1458992917", "3269007882", "3269007888","3269007896", "3269007898", "3269007902", "3269007903"], net_path, plain_files)
+     
+ 
+    print("****************")
     cnvt_plain_to_net(netcnvt_bin, plain_files, new_net_path, switch_verbose)
     
     

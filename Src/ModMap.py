@@ -62,7 +62,7 @@ def cnvt_plain_to_net(netcnvt_bin, plain_files, new_net_path, verbose):
 
 def get_all_nodes(plain_files):
     loaded_nodes = list(sumolib.xml.parse(plain_files["nod"], "nodes"))[0]
-    net_nodes = dict()
+    net_nodes = {}
     if not loaded_nodes.node:
         return net_nodes
     for node in loaded_nodes.node:
@@ -71,7 +71,7 @@ def get_all_nodes(plain_files):
     
 def get_all_edges(plain_files):
     loaded_edges = list(sumolib.xml.parse(plain_files["edg"], "edges"))[0]
-    net_edges = dict()
+    net_edges = {}
     if not loaded_edges.edge:
         return net_edges
     for edge in loaded_edges.edge:
@@ -80,7 +80,7 @@ def get_all_edges(plain_files):
     
 def get_all_connections(plain_files):
     loaded_connections = list(sumolib.xml.parse(plain_files["con"], "connections"))[0]
-    net_connections = list()
+    net_connections = []
     if not loaded_connections.connection:
         return net_connections
     for connection in loaded_connections.connection:
@@ -89,7 +89,7 @@ def get_all_connections(plain_files):
 
 def get_all_roundabouts(plain_files):
     loaded_edges = list(sumolib.xml.parse(plain_files["edg"], "edges"))[0]
-    net_roundabouts = list()
+    net_roundabouts = []
     if not loaded_edges.roundabout:
         return net_roundabouts
     for roundabout in loaded_edges.roundabout:
@@ -97,21 +97,21 @@ def get_all_roundabouts(plain_files):
     return net_roundabouts
 
 def get_incoming(node_id, net_edges):
-    incoming = list()
+    incoming = []
     for _, e in net_edges.items():
         if e.to == node_id:
             incoming.append(e)
     return incoming
 
 def get_outgoing(node_id, net_edges):
-    outgoing = list()
+    outgoing = []
     for e_id, e in net_edges.items():
         if e.attr_from == node_id:
             outgoing.append(e)
     return outgoing
 
 def edge_get_shape(edge):
-    shape = list()
+    shape = []
     for coord_pair in edge.shape.split(" "):
         if coord_pair:
             x,y = coord_pair.split(",")
@@ -138,7 +138,7 @@ def get_intersection(lx, ly, cx, cy, r):
 #remove all coordinates from edge shape, which would lie in the roundabout, and make a new end coordinate on the roundabout
 def get_new_edge_shapes(inc, out, my_node, node_r):
     
-    modified_edges = dict()
+    modified_edges = {}
     
     edges = []
     
@@ -444,6 +444,9 @@ def change_node_to_roundabout(change_node_id_to_roundabout, path, plain_files, r
     net_connections = get_all_connections(plain_files)
     net_roundabouts = get_all_roundabouts(plain_files)
     
+    with open(plain_files["tll"], "w") as file_handle:
+        file_handle.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<tlLogics version=\"1.1\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"http://sumo.dlr.de/xsd/tllogic_file.xsd\">\n</tlLogics>")
+    
     my_node = net_nodes[change_node_id_to_roundabout]
     node_x, node_y = float(my_node.x), float(my_node.y)
     node_r = radius
@@ -505,7 +508,7 @@ def create_new_node_and_delete_old_nodes(new_node_x, new_node_y, roundabout_node
     return new_node, deleted_node_ids
 
 def change_shapes_and_connected_nodes(roundabout_nodes, roundabout_edges, net_edges, new_node):
-    modified_edges = dict()
+    modified_edges = {}
     
     external_edges=[]
     for n_id in roundabout_nodes:
@@ -593,11 +596,11 @@ def change_roundabout_to_node(roundabout_edge_ids, roundabout_node_ids, path, pl
     net_connections = get_all_connections(plain_files)
     net_roundabouts = get_all_roundabouts(plain_files)
     
-    roundabout_nodes = dict()
+    roundabout_nodes = {}
     for n_id in roundabout_node_ids:
         roundabout_nodes[n_id] = net_nodes[n_id]
     
-    roundabout_edges = dict()
+    roundabout_edges = {}
     for e_id in roundabout_edge_ids:
         roundabout_edges[e_id] = net_edges[e_id]
     
@@ -611,3 +614,7 @@ def change_roundabout_to_node(roundabout_edge_ids, roundabout_node_ids, path, pl
     
     delete_connections_belonging_to_removed_edges(deleted_edge_ids, plain_files)
     
+
+
+#Vorfahrsregeln ändern Rechts-vor-Links, Priorität für eine Straße
+#Ampeln (evtl.)
