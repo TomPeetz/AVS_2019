@@ -60,41 +60,10 @@ def cnvt_plain_to_net(netcnvt_bin, plain_files, new_net_path, verbose):
         print(str(res.stdout, "utf-8"))
         print("***")
 
-# ~ def get_all_nodes(plain_files):
-    # ~ loaded_nodes = list(sumolib.xml.parse(plain_files["nod"], "nodes"))[0]
-    # ~ net_nodes = {}
-    # ~ if not loaded_nodes.node:
-        # ~ return net_nodes
-    # ~ for node in loaded_nodes.node:
-        # ~ net_nodes[node.id] = node
-    # ~ return net_nodes
-    
-# ~ def get_all_edges(plain_files):
-    # ~ loaded_edges = list(sumolib.xml.parse(plain_files["edg"], "edges"))[0]
-    # ~ net_edges = {}
-    # ~ if not loaded_edges.edge:
-        # ~ return net_edges
-    # ~ for edge in loaded_edges.edge:
-        # ~ net_edges[edge.id] = edge
-    # ~ return net_edges
-    
-# ~ def get_all_connections(plain_files):
-    # ~ loaded_connections = list(sumolib.xml.parse(plain_files["con"], "connections"))[0]
-    # ~ net_connections = []
-    # ~ if not loaded_connections.connection:
-        # ~ return net_connections
-    # ~ for connection in loaded_connections.connection:
-        # ~ net_connections.append(connection)
-    # ~ return net_connections
-
-# ~ def get_all_roundabouts(plain_files):
-    # ~ loaded_edges = list(sumolib.xml.parse(plain_files["edg"], "edges"))[0]
-    # ~ net_roundabouts = []
-    # ~ if not loaded_edges.roundabout:
-        # ~ return net_roundabouts
-    # ~ for roundabout in loaded_edges.roundabout:
-        # ~ net_roundabouts.append(roundabout)
-    # ~ return net_roundabouts
+def hack_for_cologne(plain_files):
+    #hack for cologne
+    with open(plain_files["tll"], "w") as file_handle:
+        file_handle.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<tlLogics version=\"1.1\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"http://sumo.dlr.de/xsd/tllogic_file.xsd\">\n</tlLogics>")
 
 class Net_Repr:
     
@@ -109,6 +78,8 @@ class Net_Repr:
     
     net_connections = {}
     net_connections_from_to_idx = {}
+    net_connections_from_idx = {}
+    net_connections_to_idx = {}
     
     art_id_ctr = 1
     
@@ -151,7 +122,20 @@ class Net_Repr:
                 self.art_id_ctr += 1
                 
                 self.net_connections[art_id] = connection
-                self.net_connections_from_to_idx["{} {}".format(connection.attr_from,connection.to)] = art_id
+                key = "{} {}".format(connection.attr_from, connection.to)
+                
+                if key in self.net_connections_from_to_idx:
+                    self.net_connections_from_to_idx[key].append(art_id)
+                else:
+                    self.net_connections_from_to_idx[key] = [art_id]
+                if connection.attr_from in self.net_connections_from_idx:
+                    self.net_connections_from_idx[connection.attr_from].append(art_id)
+                else:
+                    self.net_connections_from_idx[connection.attr_from] = [art_id]
+                if connection.to in self.net_connections_to_idx:
+                    self.net_connections_to_idx[connection.to].append(art_id)
+                else:
+                    self.net_connections_to_idx[connection.to] = [art_id]
                 
         if self.loaded_edges.roundabout:
             for roundabout in self.loaded_edges.roundabout:
@@ -166,6 +150,12 @@ class Net_Repr:
         
     def get_edge_outgoing_ids(self, node_id):
         return self.net_edges_from_idx[node_id].copy()
+        
+    def get_connections_in_from_ids(self, edge_id):
+        return self.net_connections_from_idx[edge_id].copy()
+        
+    def get_connections_in_to_ids(self, edge_id):
+        return self.net_connections_to_idx[edge_id].copy()
         
     def get_edge_shape(self, edge_id):
         shape=[]
@@ -225,18 +215,20 @@ class Net_Repr:
         else:
             self.net_edges_from_idx[node_id] = [edge_id]
     
-    def get_connection_art_id_by_from_to(self, from_edge_id, to_edge_id):
+    def get_connection_art_ids_by_from_to(self, from_edge_id, to_edge_id):
         key = "{} {}".format(from_edge_id,to_edge_id)
         if key in self.net_connections_from_to_idx:
-            return self.net_connections_from_to_idx[key]
+            return self.net_connections_from_to_idx[key].copy()
         else:
             return None
         
     def remove_connection_by_art_id(self, connection_art_id):
         connection = self.net_connections[connection_art_id]
-        
         del self.net_connections[connection_art_id]
-        del self.net_connections_from_to_idx["{} {}".format(connection.attr_from,connection.to)]
+        
+        self.net_connections_from_to_idx["{} {}".format(connection.attr_from,connection.to)].remove(connection_art_id)
+        self.net_connections_from_idx[connection.attr_from].remove(connection_art_id)
+        self.net_connections_to_idx[connection.to].remove(connection_art_id)
         
     def remove_edge_by_id(self, edge_id):
         edge = self.net_edges[edge_id]
@@ -290,29 +282,6 @@ class Net_Repr:
         with open(self.plain_files["con"], "w") as file_handle:
             file_handle.write(self.loaded_connections.toXML())
         
-    
-# ~ def get_incoming(node_id, net_edges):
-    # ~ incoming = []
-    # ~ for _, e in net_edges.items():
-        # ~ if e.to == node_id:
-            # ~ incoming.append(e)
-    # ~ return incoming
-
-# ~ def get_outgoing(node_id, net_edges):
-    # ~ outgoing = []
-    # ~ for e_id, e in net_edges.items():
-        # ~ if e.attr_from == node_id:
-            # ~ outgoing.append(e)
-    # ~ return outgoing
-
-# ~ def edge_get_shape(edge):
-    # ~ shape = []
-    # ~ for coord_pair in edge.shape.split(" "):
-        # ~ if coord_pair:
-            # ~ x,y = coord_pair.split(",")
-            # ~ shape.append((float(x),float(y)))
-    # ~ return shape
-
 #Create temporary file
 def get_tmp_file_for_patch(tmpd):
     tmpf = tempfile.mkstemp(prefix="patch_", suffix=".xml", dir=tmpd, text=True)
@@ -603,18 +572,14 @@ def delete_unneeded_connections(nr, connection_relevant_edge_ids):
     
     for e_id_A in connection_relevant_edge_ids:
         for e_id_B in connection_relevant_edge_ids:
-            art_id = nr.get_connection_art_id_by_from_to(e_id_A, e_id_B)
-            if art_id:
-                nr.remove_connection_by_art_id(art_id)
-            art_id = nr.get_connection_art_id_by_from_to(e_id_B, e_id_A)
-            if art_id:
-                nr.remove_connection_by_art_id(art_id)
-
-def hack_for_cologne(plain_files):
-    #hack for cologne
-    with open(plain_files["tll"], "w") as file_handle:
-        file_handle.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<tlLogics version=\"1.1\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"http://sumo.dlr.de/xsd/tllogic_file.xsd\">\n</tlLogics>")
-    
+            art_ids = nr.get_connection_art_ids_by_from_to(e_id_A, e_id_B)
+            if art_ids:
+                for art_id in art_ids:
+                    nr.remove_connection_by_art_id(art_id)
+            art_ids = nr.get_connection_art_ids_by_from_to(e_id_B, e_id_A)
+            if art_ids:
+                for art_id in art_ids:
+                    nr.remove_connection_by_art_id(art_id)
 
 def change_node_to_roundabout(change_node_id_to_roundabout, nr, radius = 20):
     
@@ -710,20 +675,16 @@ def delete_unneeded_edges_and_roundabout(nr, modified_edges, roundabout_edges, r
     if roundabout_art_id:
         nr.remove_roundabout_by_art_id(roundabout_art_id)
     
-# ~ def delete_connections_belonging_to_removed_edges(deleted_edge_ids, plain_files):
-    # ~ loaded_connections = list(sumolib.xml.parse(plain_files["con"], "connections"))[0]
+def delete_connections_belonging_to_removed_edges(nr, connection_relevant_edge_ids):
+    uniqe_revelvant_edge_ids = set(connection_relevant_edge_ids)
+    for e_id in uniqe_revelvant_edge_ids:
+        
+        for art_c_id in nr.get_connections_in_from_ids(e_id):
+            nr.remove_connection_by_art_id(art_c_id)
+            
+        for art_c_id in nr.get_connections_in_to_ids(e_id):
+            nr.remove_connection_by_art_id(art_c_id)
     
-    # ~ keep_connections = []
-    # ~ for connection in loaded_connections.connection:
-        # ~ if connection.attr_from in deleted_edge_ids or connection.to in deleted_edge_ids:
-            # ~ continue
-        # ~ keep_connections.append(connection)
-    # ~ loaded_connections.connection = keep_connections
-    
-    # ~ with open(plain_files["con"], "w") as file_handle:
-        # ~ file_handle.write(loaded_connections.toXML())
-    # ~ return True
-
 def change_roundabout_to_node(roundabout_edge_ids_str, roundabout_node_ids_str, nr):
     
     roundabout_nodes = {}
@@ -746,7 +707,7 @@ def change_roundabout_to_node(roundabout_edge_ids_str, roundabout_node_ids_str, 
     
     delete_unneeded_edges_and_roundabout(nr, modified_edges, roundabout_edges, roundabout_edge_ids_str, roundabout_node_ids_str)
     
-    delete_unneeded_connections(nr, connection_relevant_edge_ids)
+    delete_connections_belonging_to_removed_edges(nr, connection_relevant_edge_ids)
     
 
 #Vorfahrsregeln ändern Rechts-vor-Links, Priorität für eine Straße
