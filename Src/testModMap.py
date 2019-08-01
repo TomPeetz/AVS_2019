@@ -11,6 +11,7 @@ from pathlib import Path
 import sys
 import getopt
 import time
+import json
 
 def usage(p):
     print("Benutzung: {0} -h (Hilfe) | <Optionen>".format(p))
@@ -92,7 +93,14 @@ def main():
     # ~ change_roundabout_to_node(["Edge8bf161297b75401faa02f7479271fe0f","Edgefa414cf8cd49474da5143dec102d7448","Edgefbc74baa80bd462a9b6e37650207853c"], ["Node240798b03498439b92eaa37ede599e90","Node8c7d3e29c3c348f790b1c06bf1b09899","Nodedf029caac7ac4792bee33eb4ff6138e8"], net_path, plain_files)
     # ~ change_node_to_roundabout("Node8ec8db3c99294cc7ba46928b452e0f6f", net_path, plain_files)
     
+    json_str=""
+    with open('searchspace.json', 'r') as f:
+        json_str = f.read()
     
+    # ~ {'id': node.getID(), 'currentType': node.getType(), 'allowedModifications': ['intersection_priority', 'roundabout']}
+    # ~ pprint(json_str)
+    search_space = json.loads(json_str)
+    # ~ pprint(search_space)
     print("*****************")
     
     pprint("Laden...")
@@ -108,15 +116,15 @@ def main():
     
     pprint("Modifizieren...")
     pprint(time.monotonic())
-    change_node_to_roundabout("cluster_1458992876_1458992877", nr)
-    change_roundabout_to_node("199657059#1 199657059#2 199657059#3 199657059#4 199657059#5 199657059#6 199657059#7 199657059#8", "1458992905 1458992917 3269007882 3269007888 3269007896 3269007898 3269007902 3269007903", nr)
-    change_node_to_roundabout("287597242", nr)
-    change_node_to_roundabout("267850246", nr)
-    change_node_to_roundabout("1458680282", nr)
-    change_node_to_roundabout("1458680380", nr)
-    change_node_to_roundabout("1458680174", nr)
-    change_node_to_roundabout("1458680125", nr)
-    change_node_to_roundabout("1458680475", nr)
+    
+    for intersection in search_space["intersections"]:
+        change_node_to_roundabout(intersection["id"], nr)
+        
+    for roundabout in search_space["roundabouts"]:
+        pprint(roundabout["id"])
+        change_roundabout_to_node(" ".join(roundabout["edges"]), " ".join(roundabout["nodes"]), nr)
+    
+    # ~ change_roundabout_to_node("199657059#1 199657059#2 199657059#3 199657059#4 199657059#5 199657059#6 199657059#7 199657059#8", "1458992905 1458992917 3269007882 3269007888 3269007896 3269007898 3269007902 3269007903", nr)
     pprint(time.monotonic())
     
     #Minimal

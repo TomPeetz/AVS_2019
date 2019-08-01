@@ -152,10 +152,16 @@ class Net_Repr:
         return self.net_edges_from_idx[node_id].copy()
         
     def get_connections_in_from_ids(self, edge_id):
-        return self.net_connections_from_idx[edge_id].copy()
-        
+        if edge_id in self.net_connections_from_idx:
+            return self.net_connections_from_idx[edge_id].copy()
+        else:
+            return []
+            
     def get_connections_in_to_ids(self, edge_id):
-        return self.net_connections_to_idx[edge_id].copy()
+        if edge_id in self.net_connections_to_idx:
+            return self.net_connections_to_idx[edge_id].copy()
+        else:
+            return []
         
     def get_edge_shape(self, edge_id):
         shape=[]
