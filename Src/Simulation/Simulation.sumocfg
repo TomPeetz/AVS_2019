@@ -10,11 +10,12 @@
 
     <time>
         <begin value="21600"/>
+        <end value="25200"/>
     </time>
 
     <routing>
-        <routing-algorithm value="astar"/>
-        <astar.landmark-distances value="cologne_landmark_distances.txt"/>
+        <routing-algorithm value="dijkstra"/>
+        
         <device.rerouting.period value="300"/>
         <device.rerouting.adaptation-steps value="18"/>
         <device.rerouting.adaptation-interval value="10"/>
@@ -28,4 +29,7 @@
         <no-step-log value="true"/>
     </report>
 
+    <processing>
+        <ignore-route-errors value="true"/>
+    </processing>
 </configuration>
