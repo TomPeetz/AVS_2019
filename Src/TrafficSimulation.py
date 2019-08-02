@@ -9,6 +9,16 @@ import time
 import fobj
 import json
 import uuid
+import argparse
+
+parser = argparse.ArgumentParser(description='TrafficSimulation')
+parser.add_argument('--mongo', type=str, help='Address of mongodb')
+parser.add_argument('--fun_evals', type=int, help='Number of objective function evaluations')
+
+args = parser.parse_args()
+
+
+
 
 
 comm = MPI.COMM_WORLD
@@ -48,13 +58,13 @@ if rank == 0:
 
         space = generate_search_space()
 
-        trials = MongoTrials('mongo://192.168.200.1:1234/test_db/jobs', exp_key=str(uuid.uuid4()))
+        trials = MongoTrials('mongo://%s:1234/test_db/jobs' % args.mongo, exp_key=str(uuid.uuid4()))
 
         best = fmin(fn=fobj.sumo,
                     space=space,
                     trials=trials,
                     algo=tpe.suggest,
-                    max_evals=4
+                    max_evals=args.fun_evals
         )
 
         with open('res.log', 'w') as res:
@@ -101,7 +111,7 @@ else:
 
         sstdout = []
         with subprocess.Popen(
-            args = ['./worker.sh', '--mongo=192.168.200.1:1234/test_db', '--poll-interval=0.1', '--last-job-timeout=1.0'],
+            args = ['./worker.sh', '--mongo=%s:1234/test_db' % args.mongo, '--poll-interval=0.1', '--last-job-timeout=1.0'],
             stdout = subprocess.PIPE,
             stderr = subprocess.STDOUT
         ) as proc:
