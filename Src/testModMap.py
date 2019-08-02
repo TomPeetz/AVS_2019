@@ -118,13 +118,13 @@ def main():
     pprint(time.monotonic())
     
     for intersection in search_space["intersections"]:
-        change_node_to_roundabout(intersection["id"], nr)
+        for am in intersection["allowedModifications"]:
+            mparams = am.split(" ")
+            if mparams[0] == "roundabout":
+                change_intersection_to_roundabout(intersection["id"],nr)
+            
         
-    for roundabout in search_space["roundabouts"]:
-        pprint(roundabout["id"])
-        change_roundabout_to_node(" ".join(roundabout["edges"]), " ".join(roundabout["nodes"]), nr)
-    
-    # ~ change_roundabout_to_node("199657059#1 199657059#2 199657059#3 199657059#4 199657059#5 199657059#6 199657059#7 199657059#8", "1458992905 1458992917 3269007882 3269007888 3269007896 3269007898 3269007902 3269007903", nr)
+
     pprint(time.monotonic())
     
     #Minimal
