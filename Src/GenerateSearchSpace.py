@@ -290,8 +290,6 @@ for ra in net.getRoundabouts():
     
     allowedModifications=["do_nothing", "right_before_left", "traffic_light_right_on_red", "traffic_light"]
     ra_edges = [net.getEdge(r) for r in ra.getEdges()]
-    pprint("***")
-    pprint(ra_edges)
     all_inc_edges = []
     for node_id in ra.getNodes():
         n_inc_edges = net.getNode(node_id).getIncoming()
