@@ -11,6 +11,10 @@ import json
 def prepare(x, debug):
     sourcenet = path.abspath(path.join('..', '..', 'Experimente/Netconvert_Mit_Python/Maps/Minimal/SUMO_Netz', 'minimal.net.xml'))
     sourcesim = path.abspath(path.join('..', '..', 'Experimente/Netconvert_Mit_Python/Maps/Minimal/SUMO_Netz'))
+    #sourcenet = path.abspath(path.join('..', 'map', 'minimal.net.xml'))
+    #sourcesim = path.abspath(path.join('..', 'map'))
+
+    debug.write("Net %s\n" % sourcenet)
 
     with open(path.join('..', 'searchspace.json'), 'r') as f:
         json_data = json.loads(f.read())
@@ -20,6 +24,9 @@ def prepare(x, debug):
     tmpd, plain_files = cnvt_net_to_plain(net_path=sourcenet,
                       netcnvt_bin=netconv,
                       plain_output_prefix='test')
+
+    netrepr = Net_Repr(plain_files)
+
     for nodeId, mod in x:
         if nodeId.startswith('i-'):
             nid = nodeId.replace('i-', '')
@@ -27,7 +34,7 @@ def prepare(x, debug):
                 debug.write("Not modifying intersection %s\n" % nid)
                 continue
             debug.write("Changing intersection %s to roundabout\n" % nid)
-            change_node_to_roundabout(nid, '', plain_files=plain_files)
+            change_node_to_roundabout(nid, netrepr)
         elif nodeId.startswith('r-'):
             nid = nodeId.replace('r-', '')
             if (mod == 'roundabout'):
@@ -37,12 +44,13 @@ def prepare(x, debug):
             rdata = next(x for x in json_data['roundabouts'] if x['id'] == nid)
 
             # TODO: specify priority
-            change_roundabout_to_node(rdata['edges'], rdata['nodes'], '', plain_files=plain_files)
+            change_roundabout_to_node(' '.join(rdata['edges']), ' '.join(rdata['nodes']), netrepr)
 
     tmpsim = path.join(tmpd, 'Simulation')
     modifiednet = path.join(tmpsim, 'minimal.net.xml')
 
     shutil.copytree(sourcesim, tmpsim)
+    netrepr.write_to_plain()
     cnvt_plain_to_net(netcnvt_bin=netconv, plain_files=plain_files, new_net_path=modifiednet, verbose=False)
 
     trips = path.join(tmpsim, 'trips.trips.xml')
@@ -61,7 +69,7 @@ def sumo(x):
         f.write("\n")
 
         cfg = prepare(x, f)
-        args = ["sumo", "-c", cfg, "--threads", "1"]
+        args = ["sumo", "-c", cfg]#, "--threads", "1"]
 
         with subprocess.Popen(args,
                           stdout=subprocess.PIPE,

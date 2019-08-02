@@ -34,26 +34,28 @@ def generate_search_space():
 if rank == 0:
     for r in range(0, 1):
         msg = []
-        for worker in range(0, size-1):
-            xmls = {}
-            files = os.listdir('Example')
-            for file in files:
-                xmls[file] = open("Example/"+file, "r").read()
-            msg.append(xmls)
+        #for worker in range(0, size-1):
+        #    xmls = {}
+        #    files = os.listdir('Example')
+        #    for file in files:
+        #        xmls[file] = open("Example/"+file, "r").read()
+        #    msg.append(xmls)
 
         for n in range(0, size-1):
             print("%d: sending to %d" % (rank, n + 1))
-            comm.send(msg[n], dest=n+1)
+            #comm.send(msg[n], dest=n+1)
+            comm.send('asd', dest=n+1)
 
         space = generate_search_space()
 
-        trials = MongoTrials('mongo://localhost:1234/test_db/jobs', exp_key=str(uuid.uuid4()))
+        trials = MongoTrials('mongo://192.168.200.1:1234/test_db/jobs', exp_key=str(uuid.uuid4()))
 
         best = fmin(fn=fobj.sumo,
                     space=space,
                     trials=trials,
                     algo=tpe.suggest,
-                    max_evals=10)
+                    max_evals=4
+        )
 
         with open('res.log', 'w') as res:
             pprint(best, res)
@@ -99,7 +101,7 @@ else:
 
         sstdout = []
         with subprocess.Popen(
-            args = ['./worker.sh', '--mongo=localhost:1234/test_db', '--poll-interval=0.1', '--last-job-timeout=1.0'],
+            args = ['./worker.sh', '--mongo=192.168.200.1:1234/test_db', '--poll-interval=0.1', '--last-job-timeout=1.0'],
             stdout = subprocess.PIPE,
             stderr = subprocess.STDOUT
         ) as proc:
