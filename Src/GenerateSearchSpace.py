@@ -287,19 +287,57 @@ ranodes = []
 roundabouts = []
 for ra in net.getRoundabouts():
     ranodes.extend(ra.getNodes())
-    roundabouts.append({'id': '-'.join(ra.getNodes()), 'nodes': ra.getNodes(), 'edges': ra.getEdges(), 'allowedModifications': ['intersection_priority', 'roundabout']})
+    
+    allowedModifications=["do_nothing", "right_before_left", "traffic_light_right_on_red", "traffic_light"]
+    ra_edges = [net.getEdge(r) for r in ra.getEdges()]
+    pprint("***")
+    pprint(ra_edges)
+    all_inc_edges = []
+    for node_id in ra.getNodes():
+        n_inc_edges = net.getNode(node_id).getIncoming()
+        for e_id in n_inc_edges:
+            pprint(e_id)
+            if not e_id in ra_edges:
+                pprint(e_id)
+                all_inc_edges.append(e_id)
+        # ~ all_inc_edges += net.getNode(node_id).getIncoming()
+    
+    if len(all_inc_edges) > 1:        
+        i=0
+        for i in range(len(all_inc_edges)):
+            for j in range(i):
+                allowedModifications.append("priority {} {}".format(all_inc_edges[i].getID(), all_inc_edges[j].getID()))
+                allowedModifications.append("priority_stop {} {}".format(all_inc_edges[i].getID(), all_inc_edges[j].getID()))
+    
+    roundabouts.append({'id': '-'.join(ra.getNodes()), 'nodes': ra.getNodes(), 'edges': ra.getEdges(), 'allowedModifications': allowedModifications})
+
+
 
 intersections = []
 
 forbidden_edge_type = ["highway.motorway", "highway.motorway_link", "highway.trunk", "highway.trunk_link"]
 
-
-
 for node in nodes:
+    
+    allowedModifications = ["do_nothing"]
+    
+    if node.getID() in ranodes: continue
+
+    all_edges = node.getIncoming() + node.getOutgoing()
+
+    has_forbidden_edge = False
+    for edge in all_edges:
+        if nr.net_edges[edge.getID()].type in forbidden_edge_type:
+            has_forbidden_edge = True
+            break
+    if has_forbidden_edge:
+        continue
+        
     if len(node.getIncoming()) < 2 and len(node.getOutgoing()) < 2:
         continue
     
-    all_edges = node.getIncoming() + node.getOutgoing()
+    ########### Roundabout
+    to_roundabout = True
     
     uniqe_nodes = set()
     for edge in all_edges:
@@ -307,7 +345,7 @@ for node in nodes:
         uniqe_nodes.add(edge.getToNode())
     uniqe_nodes -= set([node])
     if len(uniqe_nodes) < 3:
-        continue
+        to_roundabout = False
     
     is_to_close = False
     for connected_node in uniqe_nodes:
@@ -316,21 +354,34 @@ for node in nodes:
         if math.sqrt((x0 -x1)**2 + (y0 - y1)**2) <= 50:
             is_to_close = True
     if is_to_close:
+        to_roundabout = False
+        
+    if to_roundabout:
+        allowedModifications.append("roundabout")
+    ########### Roundabout
+    
+    ########### Right before left
+    allowedModifications.append("right_before_left")
+    
+    ########### 
+    # ~ ["priority", "priority_stop"]
+    incEdges = node.getIncoming()
+    if len(incEdges) < 2:
         continue
     
-    has_forbidden_edge = False
-    for edge in all_edges:
-        if nr.net_edges[edge.getID()].type in forbidden_edge_type:
-            has_forbidden_edge = True
-            break
-    if has_forbidden_edge:
-        continue
+    allowedModifications.append("traffic_light")
+    allowedModifications.append("traffic_light_right_on_red")
     
-    if node.getID() in ranodes: continue
+    i=0
+    for i in range(len(incEdges)):
+        for j in range(i):
+            allowedModifications.append("priority {} {}".format(incEdges[i].getID(), incEdges[j].getID()))
+            allowedModifications.append("priority_stop {} {}".format(incEdges[i].getID(), incEdges[j].getID()))
     
-    intersections.append({'id': node.getID(), 'currentType': node.getType(), 'allowedModifications': ['intersection_priority', 'roundabout']})
+    
+    intersections.append({'id': node.getID(), 'currentType': node.getType(), 'allowedModifications': allowedModifications})
+    # ~ intersections.append({'id': node.getID(), 'currentType': node.getType(), 'allowedModifications': ['intersection_priority', 'roundabout']})
 
-    # ~ print("ID: %s, Type: %s,Incoming: %d, Outgoing: %d" % (node.getID(), node.getType(), len(node.getIncoming()), len(node.getOutgoing())))
 
 
 searchspace = {}

@@ -262,16 +262,16 @@ class Net_Repr:
         roundabouts = []
         connections = []
         
-        for k,v in self.net_nodes.items():
+        for _,v in self.net_nodes.items():
             nodes.append(v) 
         
-        for k,v in self.net_edges.items():
+        for _,v in self.net_edges.items():
             edges.append(v)
             
-        for k,v in self.net_roundabouts.items():
+        for _,v in self.net_roundabouts.items():
             roundabouts.append(v) 
         
-        for k,v in self.net_connections.items():
+        for _,v in self.net_connections.items():
             connections.append(v)
 
         self.loaded_nodes.node = nodes
@@ -314,6 +314,11 @@ def get_new_edge_shapes(nr, my_node, node_r):
     
     inc = nr.get_edge_incoming_ids(my_node.id)
     out = nr.get_edge_outgoing_ids(my_node.id)
+    
+    max_num_lanes = 1
+    for e_id in inc + out:
+        if int(nr.net_edges[e_id].numLanes) > max_num_lanes:
+            max_num_lanes = int(nr.net_edges[e_id].numLanes)
     
     for e_id in inc:
         i = nr.net_edges[e_id]
@@ -373,7 +378,7 @@ def get_new_edge_shapes(nr, my_node, node_r):
         
         modified_edges[edge.id] = {"nearest_x" : nearest_x, "nearest_y" : nearest_y, "nearest_dist" : nearest_dist, "new_shape" : new_shape, "needs_node" : needs_node, "x_i" : x_i, "y_i" : y_i}
     #return dict with key = id
-    return modified_edges
+    return modified_edges, max_num_lanes
 
 #get the node from nodes list, that is closest to given x and y
 def get_nearest_node_id(x, y, nodes):
@@ -491,7 +496,7 @@ def create_new_nodes(nr, node_id, modified_edges):
     
     return new_nodes
 
-def create_new_edges(nr, node_id, node_x, node_y, node_r, new_nodes, modified_edges):
+def create_new_edges(nr, node_id, node_x, node_y, node_r, new_nodes, modified_edges, max_num_lanes):
     
     #Shape steps in a full circle
     shape_steps_on_full_circle = 40
@@ -555,7 +560,7 @@ def create_new_edges(nr, node_id, node_x, node_y, node_r, new_nodes, modified_ed
         shape_str = ""
         for x,y in shape:
             shape_str += "{},{} ".format(x, y)
-        new_edge = nr.xmlEdgeClass(["tram rail_urban rail rail_electric ship", sid, "Edge"+uuid.uuid4().hex, "1", "9", shape_str, "13.89", eid, "highway.primary"], {})
+        new_edge = nr.xmlEdgeClass(["tram rail_urban rail rail_electric ship", sid, "Edge"+uuid.uuid4().hex, str(max_num_lanes), "9", shape_str, "13.89", eid, "highway.primary"], {})
         new_edges.append(new_edge)
     
     nr.add_new_edges(new_edges)
@@ -586,24 +591,6 @@ def delete_unneeded_connections(nr, connection_relevant_edge_ids):
             if art_ids:
                 for art_id in art_ids:
                     nr.remove_connection_by_art_id(art_id)
-
-def change_node_to_roundabout(change_node_id_to_roundabout, nr, radius = 20):
-    
-    my_node = nr.net_nodes[change_node_id_to_roundabout]
-    node_x, node_y = float(my_node.x), float(my_node.y)
-    node_r = radius
-    node_id = my_node.id
-    
-
-    modified_edges = get_new_edge_shapes(nr, my_node, node_r)
-
-    new_nodes = create_new_nodes(nr, node_id, modified_edges)
-
-    nr.remove_nodes_by_id([node_id])
-   
-    new_edges,connection_relevant_edge_ids = create_new_edges(nr, node_id, node_x, node_y, node_r, new_nodes, modified_edges)
-    
-    delete_unneeded_connections(nr, connection_relevant_edge_ids)
     
 def get_roundabout_center(roundabout_nodes):
     A, B, C, *_ = roundabout_nodes
@@ -715,6 +702,63 @@ def change_roundabout_to_node(roundabout_edge_ids_str, roundabout_node_ids_str, 
     
     delete_connections_belonging_to_removed_edges(nr, connection_relevant_edge_ids)
     
+    return new_node.id
 
-#Vorfahrsregeln ändern Rechts-vor-Links, Priorität für eine Straße
-#Ampeln (evtl.)
+###Externe Funktionen
+
+def change_intersection_to_roundabout(change_node_id_to_roundabout, nr, radius = 20):
+    
+    my_node = nr.net_nodes[change_node_id_to_roundabout]
+    node_x, node_y = float(my_node.x), float(my_node.y)
+    node_r = radius
+    node_id = my_node.id
+    
+    modified_edges, max_num_lanes = get_new_edge_shapes(nr, my_node, node_r)
+
+    new_nodes = create_new_nodes(nr, node_id, modified_edges)
+
+    nr.remove_nodes_by_id([node_id])
+   
+    new_edges,connection_relevant_edge_ids = create_new_edges(nr, node_id, node_x, node_y, node_r, new_nodes, modified_edges, max_num_lanes)
+    
+    delete_unneeded_connections(nr, connection_relevant_edge_ids)
+
+def change_intersection_to_right_before_left(node_id, nr):
+    node = nr.net_nodes[node_id]
+    node.type = "right_before_left"
+    node.setAttribute("rightOfWay", "edgePriority")
+    
+def change_intersection_to_traffic_light(node_id, nr):
+    node = nr.net_nodes[node_id]
+    node.type = "traffic_light"
+    node.setAttribute("rightOfWay", "edgePriority")
+
+def change_intersection_to_traffic_light_right_on_red(node_id, nr):
+    node = nr.net_nodes[node_id]
+    node.type = "traffic_light_right_on_red"
+    node.setAttribute("rightOfWay", "edgePriority")
+    
+def change_intersection_right_of_way(node_id, right_of_way_type, prio_edge_id_A, prio_edge_id_B, nr):
+    node = nr.net_nodes[node_id]
+    node.type = right_of_way_type
+    node.setAttribute("rightOfWay", "edgePriority")
+    nr.net_edges[prio_edge_id_A].priority = 999
+    nr.net_edges[prio_edge_id_B].priority = 999
+    
+def change_roundabout_to_right_before_left(roundabout_edge_ids_str, roundabout_node_ids_str, nr):
+    node_id = change_roundabout_to_node(roundabout_edge_ids_str, roundabout_node_ids_str, nr)
+    change_intersection_to_right_before_left(node_id, nr)
+    
+def change_roundabout_to_traffic_light(roundabout_edge_ids_str, roundabout_node_ids_str, nr):
+    node_id = change_roundabout_to_node(roundabout_edge_ids_str, roundabout_node_ids_str, nr)
+    change_intersection_to_traffic_light(node_id, nr)
+
+def change_roundabout_to_traffic_light_right_on_red(roundabout_edge_ids_str, roundabout_node_ids_str, nr):
+    node_id = change_roundabout_to_node(roundabout_edge_ids_str, roundabout_node_ids_str, nr)
+    change_intersection_to_traffic_light_right_on_red(node_id, nr)
+
+def change_roundabout_to_right_of_way(roundabout_edge_ids_str, roundabout_node_ids_str, right_of_way_type, prio_edge_id_A, prio_edge_id_B, nr):
+    node_id = change_roundabout_to_node(roundabout_edge_ids_str, roundabout_node_ids_str, nr)
+    pprint(node_id)
+    change_intersection_right_of_way(node_id, right_of_way_type, prio_edge_id_A, prio_edge_id_B, nr)
+
