@@ -17,6 +17,13 @@ else:
 
 import sumolib
 
+import argparse
+
+parser = argparse.ArgumentParser(description='GenerateSearchSpace')
+parser.add_argument('--net', type=str, help='Input net.xml')
+parser.add_argument('--searchspace', type=str, help='Output generated SearchSpace.json')
+args = parser.parse_args()
+
 def load_netconvert_binary():
     netcnvt = sumolib.checkBinary("netconvert")
     return netcnvt
@@ -271,8 +278,7 @@ class Net_Repr:
         with open(self.plain_files["con"], "w") as file_handle:
             file_handle.write(self.loaded_connections.toXML())
 
-# ~ netxml = path.abspath(path.join("..", "gen_test.net.xml"))
-netxml = path.abspath(path.join("..", "TAPASCologne-0.32.0/cologne.net.xml"))
+netxml = path.abspath(args.net)
 
 net = sumolib.net.readNet(str(netxml))
 
@@ -388,7 +394,7 @@ searchspace['roundabouts'] = roundabouts
 
 json_data = json.dumps(searchspace)
 
-with open('searchspace.json', 'w') as f:
+with open(args.searchspace, 'w') as f:
     f.write(json_data)
 
 
