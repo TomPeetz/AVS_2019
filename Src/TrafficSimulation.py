@@ -2,6 +2,7 @@ from mpi4py import MPI
 from hyperopt import hp, tpe, fmin
 from hyperopt.mongoexp import MongoTrials
 from pprint import pprint
+from os import path
 import os
 import tempfile
 import subprocess
@@ -18,17 +19,17 @@ parser.add_argument('--fun_evals', type=int, help='Number of objective function 
 args = parser.parse_args()
 
 
-
-
-
 comm = MPI.COMM_WORLD
 size = comm.size
 rank = comm.rank
 status = MPI.Status()
 
+with open(path.abspath(path.join("Simulation", "Simulation.json")), "r") as json_data:
+    config = json.load(json_data)
+
 
 def generate_search_space():
-    with open('searchspace.json', 'r') as f:
+    with open(config['searchSpaceFile'], 'r') as f:
         json_data = json.loads(f.read())
 
     searchspace = []

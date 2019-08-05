@@ -8,15 +8,21 @@ import traceback
 import json
 
 
-def prepare(x, debug):
-    sourcenet = path.abspath(path.join('..', 'Simulation/', 'cologne.net.xml'))
-    sourcesim = path.abspath(path.join('..', 'Simulation/'))
-    #sourcenet = path.abspath(path.join('..', 'map', 'minimal.net.xml'))
-    #sourcesim = path.abspath(path.join('..', 'map'))
 
-    # ~ debug.write("Net %s\n" % sourcenet)
 
-    with open(path.abspath(path.join('searchspace.json')), 'r') as f:
+def get_base_path():
+    if os.path.exists("fobj.py"):
+        return path.abspath('.')
+    return path.abspath("..")  # running on mpi
+
+
+def prepare(x, config, data, debug):
+    sourcenet = path.abspath(path.join(get_base_path(), config['netFile']))
+    sourcesim = path.abspath(path.join(get_base_path(), config['simPath']))
+
+    debug.write("Net %s\n" % sourcenet)
+
+    with open(path.abspath(path.join(get_base_path(), config['searchSpaceFile'])), 'r') as f:
         json_data = json.loads(f.read())
 
 
@@ -89,8 +95,9 @@ def prepare(x, debug):
             # TODO: specify priority
             # ~ change_roundabout_to_node(' '.join(rdata['edges']), ' '.join(rdata['nodes']), netrepr)
 
+    data['tempPath'] = tmpd
     tmpsim = path.join(tmpd, 'Simulation')
-    modifiednet = path.join(tmpsim, 'minimal.net.xml')
+    modifiednet = path.join(tmpsim, 'modified.net.xml')
     pprint(tmpsim)
     shutil.copytree(sourcesim, tmpsim)
     netrepr.write_to_plain()
@@ -106,12 +113,23 @@ def prepare(x, debug):
 def sumo(x):
     f = open("debug.log", "w")
 
+    basepath = get_base_path()
+    f.write("BasePath: %s\n" % basepath)
+    with open(path.join(basepath, "Simulation", "Simulation.json")) as json_data:
+        config = json.load(json_data)
+    pprint(config, f)
+
     try:
+        data = {}
+        data['decisionvector'] = x
+        data['penaltyValue'] = config['penaltyValue']
+
+
         f.write("Decision vector:\n")
         pprint(x, f)
         f.write("\n")
 
-        cfg = prepare(x, f)
+        cfg = prepare(x, config, data, f)
         args = ["sumo", "-c", cfg]#, "--threads", "1"]
 
         with subprocess.Popen(args,
@@ -140,11 +158,16 @@ def sumo(x):
         f.write(str(y.get('Statistics (avg)').get('WaitingTime')))
         f.write("\n")
 
+        with open('data.json') as c:
+            c.write(json.dumps(data))
+            c.close()
+
         return y.get('Statistics (avg)').get('TimeLoss')
 
     except Exception as e:
         f.write("\nException:\n")
         #pprint(e, f)
         traceback.print_exc(file=f)
+        return config["penaltyValue"]
     finally:
         f.close()

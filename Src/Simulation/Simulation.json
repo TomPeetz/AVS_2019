@@ -1,0 +1,6 @@
+{
+  "penaltyValue": 9999.0,
+  "netFile": "Simulation/minimal.net.xml",
+  "simPath": "Simulation",
+  "searchSpaceFile": "Simulation/searchspace.json"
+}
