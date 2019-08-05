@@ -9,14 +9,14 @@ import json
 
 
 def prepare(x, debug):
-    sourcenet = path.abspath(path.join('..', 'TAPASCologne-0.32.0/', 'cologne.net.xml'))
-    sourcesim = path.abspath(path.join('..', 'TAPASCologne-0.32.0/'))
+    sourcenet = path.abspath(path.join('..', 'Simulation/', 'cologne.net.xml'))
+    sourcesim = path.abspath(path.join('..', 'Simulation/'))
     #sourcenet = path.abspath(path.join('..', 'map', 'minimal.net.xml'))
     #sourcesim = path.abspath(path.join('..', 'map'))
 
     # ~ debug.write("Net %s\n" % sourcenet)
 
-    with open(path.join('searchspace.json'), 'r') as f:
+    with open(path.abspath(path.join('searchspace.json')), 'r') as f:
         json_data = json.loads(f.read())
 
 
@@ -77,10 +77,10 @@ def prepare(x, debug):
                 change_roundabout_to_traffic_light(' '.join(rdata['edges']), ' '.join(rdata['nodes']), netrepr)
             elif op == "priority":
                 _, e_id_1, e_id_2 = mod_params
-                change_roundabout_right_of_way(' '.join(rdata['edges']), ' '.join(rdata['nodes']), op, e_id_1, e_id_2, netrepr)
+                change_roundabout_to_right_of_way(' '.join(rdata['edges']), ' '.join(rdata['nodes']), op, e_id_1, e_id_2, netrepr)
             elif op == "priority_stop":
                 _, e_id_1, e_id_2 = mod_params
-                change_roundabout_right_of_way(' '.join(rdata['edges']), ' '.join(rdata['nodes']), op, e_id_1, e_id_2, netrepr)
+                change_roundabout_to_right_of_way(' '.join(rdata['edges']), ' '.join(rdata['nodes']), op, e_id_1, e_id_2, netrepr)
             else:
                 pass
             
@@ -100,7 +100,7 @@ def prepare(x, debug):
 
     # ~ subprocess.Popen(args = [os.path.join(os.environ['SUMO_HOME'], 'tools', 'randomTrips.py'), '-n', modifiednet, '-o', trips]).wait()
 
-    return path.join(tmpsim, 'test.sumocfg')
+    return path.join(tmpsim, 'Simulation.sumocfg')
 
 
 def sumo(x):
