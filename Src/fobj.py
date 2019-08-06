@@ -2,7 +2,7 @@ from os import path
 from io import StringIO
 from ModMap import *
 from pprint import pprint
-# ~ import yaml
+import yaml
 import shutil
 import traceback
 import json
@@ -51,7 +51,7 @@ def prepare(x, config, data, debug):
             elif op == "traffic_light":
                 change_intersection_to_traffic_light(nid, netrepr)
             elif op == "roundabout":
-                change_intersection_to_roundabout(nid, op, e_id_1, e_id_2, netrepr)
+                change_intersection_to_roundabout(nid, netrepr)
             elif op == "priority":
                 _, e_id_1, e_id_2 = mod_params
                 change_intersection_right_of_way(nid, op, e_id_1, e_id_2, netrepr)
@@ -95,7 +95,7 @@ def prepare(x, config, data, debug):
             # TODO: specify priority
             # ~ change_roundabout_to_node(' '.join(rdata['edges']), ' '.join(rdata['nodes']), netrepr)
 
-    data['tempPath'] = tmpd
+    data['tempPath'] = str(tmpd)
     tmpsim = path.join(tmpd, 'Simulation')
     modifiednet = path.join(tmpsim, 'modified.net.xml')
     pprint(tmpsim)
@@ -123,6 +123,7 @@ def sumo(x):
         data = {}
         data['decisionvector'] = x
         data['penaltyValue'] = config['penaltyValue']
+        data['resultsPath'] = str(path.abspath('.'))
 
 
         f.write("Decision vector:\n")
@@ -158,11 +159,16 @@ def sumo(x):
         f.write(str(y.get('Statistics (avg)').get('WaitingTime')))
         f.write("\n")
 
-        with open('data.json') as c:
+        fun_val = y.get('Statistics (avg)').get('TimeLoss')
+
+        data['statistics'] = y
+        data['funVal'] = fun_val
+
+        with open('data.json', 'w') as c:
             c.write(json.dumps(data))
             c.close()
 
-        return y.get('Statistics (avg)').get('TimeLoss')
+        return fun_val
 
     except Exception as e:
         f.write("\nException:\n")
