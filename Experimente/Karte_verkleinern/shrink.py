@@ -335,12 +335,53 @@ def check_trips(trips):
     
     return trips_to_remove
 
-param_net_path = "cologne.net.xml"
-param_new_net_path = "cologne_small.net.xml"
-param_trips_path = "cologne.trips.xml"
-param_new_trips_path = "cologne_small.trips.xml"
+try:
+    opts, args = getopt.getopt(sys.argv[1:], "vi:o:a:b:c:d:e:r:")
+except getopt.GetoptError as err:
+    print(err)
+    print("i Input net; o Output net; a Input trips; b Output trips; c Input config; d Output config; e Log file name; r x0,y0,x1,y1")
+    sys.exit(1)
+
+param_net_path = False
+param_new_net_path = False
+param_trips_path = False
+param_new_trips_path = False
+param_conf_path = False
+param_new_conf_path = False
+param_new_log = False
+x0, y0, x1, y1 = False, False, False, False
 VERBOSE=False
 
+for o, a in opts:
+    if o == "-i":
+        param_net_path = a
+    elif o == "-o":
+        param_new_net_path = a
+    elif o == "-a":
+        param_trips_path = a
+    elif o == "-b":
+        param_new_trips_path = a
+    elif o =="-c":
+        param_conf_path = a
+    elif o =="-d":
+        param_new_conf_path = a
+    elif o =="-e":
+        param_new_log = a
+    elif o =="-r":
+        x0, y0, x1, y1 = list(map(float,a.split(",")))
+    elif o =="-v":
+        VERBOSE=True
+
+
+#Upper left
+# ~ x0 = 7100.
+# ~ y0 = 21000.
+
+#lower right
+# ~ x1 = 20300.
+# ~ y1 = 8700.
+
+#######################
 net_path = Path(param_net_path).resolve()
 if not net_path.exists() or net_path.is_dir():
     sys.exit("Netz nicht gefunden")
@@ -372,17 +413,6 @@ original_trips_root = original_trips_tree.getroot()
 
 pprint("Modify net...")
 
-# ~ #Upper left
-x0 = 7100.
-# ~ x0 = 12100.
-y0 = 21000.
-# ~ y0 = 16500.
-
-# ~ #lower right
-x1 = 20300.
-# ~ x1 = 16600.
-y1 = 8700.
-# ~ y1 = 10900.
 rect = (x0, y0, x1, y1)
 
 keep_nodes = set()
@@ -514,6 +544,19 @@ with open(original_trips_path) as old_file, open(new_trips_path, "w") as new_fil
 pprint("Write net...")
 nr.write_to_plain()
 
+pprint("Updating config")
+
+original_conf_path = Path(param_conf_path).resolve()
+new_conf_path = Path(param_new_conf_path).resolve()
+
+original_conf_tree = ET.parse(original_conf_path)
+original_conf_root = original_conf_tree.getroot()
+
+original_conf_root.find("input").find("net-file").attrib["value"] = new_net_path.name
+original_conf_root.find("input").find("route-files").attrib["value"] = new_trips_path.name
+original_conf_root.find("report").find("log").attrib["value"] = param_new_log
+
+original_conf_tree.write(new_conf_path)
 
 pprint("Converting back...")
 cnvt_plain_to_net(netcnvt_bin, plain_files, new_net_path, VERBOSE)
