@@ -1,6 +1,6 @@
 #!/bin/bash
 
-nodes=`cat nodes`
+nodes=`cat nodes_rsync_update`
 
 for node in $nodes; do
   echo "Pushing map to $node"
