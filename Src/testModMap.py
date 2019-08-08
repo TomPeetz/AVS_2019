@@ -12,6 +12,8 @@ import sys
 import getopt
 import time
 import json
+import tempfile
+import subprocess
 
 def usage(p):
     print("Benutzung: {0} -h (Hilfe) | <Optionen>".format(p))

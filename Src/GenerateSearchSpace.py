@@ -300,9 +300,7 @@ for ra in net.getRoundabouts():
     for node_id in ra.getNodes():
         n_inc_edges = net.getNode(node_id).getIncoming()
         for e_id in n_inc_edges:
-            pprint(e_id)
             if not e_id in ra_edges:
-                pprint(e_id)
                 all_inc_edges.append(e_id)
         # ~ all_inc_edges += net.getNode(node_id).getIncoming()
     
@@ -313,7 +311,7 @@ for ra in net.getRoundabouts():
                 allowedModifications.append("priority {} {}".format(all_inc_edges[i].getID(), all_inc_edges[j].getID()))
                 allowedModifications.append("priority_stop {} {}".format(all_inc_edges[i].getID(), all_inc_edges[j].getID()))
     
-    roundabouts.append({'id': '-'.join(ra.getNodes()), 'nodes': ra.getNodes(), 'edges': ra.getEdges(), 'allowedModifications': allowedModifications})
+    roundabouts.append({"id": "  ".join([" ".join(ra.getNodes()), " ".join(ra.getEdges())]), 'allowedModifications': allowedModifications})
 
 
 
