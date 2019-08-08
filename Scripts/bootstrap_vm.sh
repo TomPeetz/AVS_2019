@@ -1,15 +1,12 @@
 
 #!/bin/bash
 
-#slaves=`cat slaves`
-#i=2
-#for slave in $slaves;
-#do
-i=11
-slave=pip11
-
+slaves=`cat slaves`
+i=2
+for slave in $slaves;
+do
   echo "Stopping and unregistering vm on $slave"
-  ssh -i id.mpi $slave << EOF
+  ssh -i id.mpi inf1704@$slave << EOF
     export PATH=$PATH:/usr/local/bin
     VBoxManage controlvm simo poweroff
     sleep 5
@@ -18,7 +15,7 @@ slave=pip11
     mkdir -p ~/AVS_2019/vbox
 EOF
   echo "Copying new vm to $slave"
-  rsync --progress -av -e "ssh -i id.mpi" ~/AVS_2019/vbox/simo $slave:~/AVS_2019/vbox
+  rsync --progress -av -e "ssh -i id.mpi" ~/AVS_2019/vbox/simo inf1704@$slave:~/AVS_2019/vbox
   echo "Registering and starting vm on $slave"
   ssh -i id.mpi $slave << EOF
     export PATH=$PATH:/usr/local/bin
@@ -55,5 +52,4 @@ EOF
     fi
     let i++
 
-#done
-
+done
