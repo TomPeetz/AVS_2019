@@ -17,7 +17,7 @@ EOF
   echo "Copying new vm to $slave"
   rsync --progress -av -e "ssh -i id.mpi" ~/AVS_2019/vbox/simo inf1704@$slave:~/AVS_2019/vbox
   echo "Registering and starting vm on $slave"
-  ssh -i id.mpi $slave << EOF
+  ssh -i id.mpi inf1704@$slave << EOF
     export PATH=$PATH:/usr/local/bin
     VBoxManage registervm ~/AVS_2019/vbox/simo/simo.vbox
     VBoxManage modifyvm simo --macaddress1 auto
