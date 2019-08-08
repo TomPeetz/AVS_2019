@@ -538,7 +538,8 @@ with open(original_trips_path) as old_file, open(new_trips_path, "w") as new_fil
     for line in old_file:
         reg_res = regex.search(line)
         if reg_res:
-            if reg_res.group(0)[4:-1] in trips_to_delete:
+            id_str = reg_res.group(0)[4:-1]
+            if id_str in trips_to_delete or id_str == "pkw":
                 continue
         new_file.write(line)
         
