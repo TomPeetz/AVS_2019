@@ -13,7 +13,7 @@ import tempfile
 import copy
 import xml.etree.ElementTree as ET
 import collections
-form multiprocessing import cpu_count
+from multiprocessing import cpu_count
 from multiprocessing import Pool
 from ctypes import *
 import re
