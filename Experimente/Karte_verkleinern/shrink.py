@@ -514,7 +514,7 @@ edge_id_to_array_1d = edge_id_to_array_1d_type(*array_of_arrays)
 
 tc_lib.check_trip.argtypes = (c_ulonglong, c_ulonglong, c_ulonglong, POINTER(POINTER(c_ulonglong)))
 
-pool_size=multiprocessing.cpu_count()
+pool_size=cpu_count()
 n_chunks = pool_size * 4
 a_results=[]
 a_trips = [trips_l_small[i:i + int(len(trips_l_small)/n_chunks)] for i in range(0, len(trips_l_small), int(len(trips_l_small)/n_chunks))]
