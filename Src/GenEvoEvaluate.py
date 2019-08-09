@@ -6,6 +6,7 @@ import atexit
 import os
 import io
 import hashlib
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from ModMap import *
@@ -138,7 +139,7 @@ def populate_tmpd():
     return nr, tmpd, plain_files, s_config, net_file, log_file
     
 def modify_net(individual, nr, plain_files, net_file):
-    _, dna = individual
+    _, dna, _ = individual
     
     for g_type, g_id, g_mod in dna:
         if g_type == GenEvoConstants.INTER_NODE:
@@ -204,7 +205,7 @@ def cleanup(tmpd):
 def evaluate_individual(individual):
     iid, *_ = individual
     
-    # ~ _, dna = individual
+    # ~ _, dna, _ = individual
     # ~ pprint("dna")
     # ~ pprint(hashlib.sha1(str(dna).encode("UTF-8")).hexdigest())
     

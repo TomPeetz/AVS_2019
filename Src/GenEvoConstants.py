@@ -13,3 +13,5 @@ PRIORITY_STOP="priority_stop"
 
 RA_SEP="  "
 II_SEP=" "
+
+NO_FITNESS=float("inf")

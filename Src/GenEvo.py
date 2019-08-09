@@ -30,8 +30,9 @@ def initialize_first_generation(genome, population_size, stable_random, id_ctr):
         dna = []
         for gene in genome:
             dna.append((gene[0], gene[1], stable_random.choice(gene[2])))
-        population.append((id_ctr, dna))
+        population.append([id_ctr, dna, False])
         id_ctr += 1
+    population.sort(key = lambda x: x[0])
     return population
 
 def single_evaluate_population(population):
@@ -155,7 +156,7 @@ def main():
     if v:
         print("Using seed: {0:x}".format(seed))
     
-    with open(searchspace_path, 'r') as f:
+    with open(searchspace_path, "r") as f:
         searchspace = json.loads(f.read())
     
     if v:
@@ -233,14 +234,38 @@ def main():
     
     #possible gen only population_size - 1 individuals and inject a special individual with all genes do_nothing
     generation_A = initialize_first_generation(genome, population_size, stable_random, individual_id_ctr)
+    individual_id_ctr += population_size
+    # ~ generation_B = initialize_first_generation(genome, population_size, stable_random, individual_id_ctr)
+    individual_id_ctr += population_size
     
     if use_local_mt:
         generation_A_fitness = local_mp_evaluate_population(generation_A, pool)
+        # ~ generation_B_fitness = local_mp_evaluate_population(generation_B, pool)
     elif use_mpi:
         #TODO: Call mpi_evaluate_population with approbiate parameters
         pass
     else:
         generation_A_fitness = single_evaluate_population(generation_A)
+        # ~ generation_B_fitness = single_evaluate_population(generation_B)
+    
+    generation_A_fitness.sort(key = lambda x: x[0])
+    for individual, fitness in zip(generation_A, generation_A_fitness):
+        individual[2] = fitness[1]
+    
+    # ~ generation_B_fitness.sort(key = lambda x: x[0])
+    # ~ for individual, fitness in zip(generation_B, generation_B_fitness):
+        # ~ individual[2] = fitness[1]
+    
+    ###LRS after: JEBARI, Khalid; MADIAFI, Mohammed. Selection methods for genetic algorithms. International Journal of Emerging Sciences, 2013, 3. Jg., Nr. 4, S. 333-344.
+    
+    
+    # ~ sum_v = 1 / ( len(generation_A) - 2.001 )
+    
+    # ~ selected_individuals = []
+    # ~ for individual in generation_A:
+        # ~ alpha = stable_random.uniform(0, sum_v)
+        
+        
     
     if use_local_mt:
         pool.close()
