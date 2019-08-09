@@ -5,6 +5,7 @@ import tempfile
 import atexit
 import os
 import io
+import hashlib
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from ModMap import *
@@ -115,6 +116,9 @@ def populate_tmpd():
     with open(plain_files["typ"], "w") as f:
         f.write(plain_typ)
         
+    # ~ pprint("constants:")
+    # ~ pprint(hashlib.sha1((plain_con+plain_edg+plain_nod+plain_tll+plain_typ+sumo_cfg+trips+vtypes).encode("UTF-8")).hexdigest())
+    
     s_config = Path(tmpd, S_CONFIG)
     trips_file = Path(tmpd, TRIPS_FILE)
     vtypes_file = Path(tmpd, VTYPES_FILE)
@@ -200,6 +204,10 @@ def cleanup(tmpd):
 def evaluate_individual(individual):
     iid, *_ = individual
     
+    # ~ _, dna = individual
+    # ~ pprint("dna")
+    # ~ pprint(hashlib.sha1(str(dna).encode("UTF-8")).hexdigest())
+    
     if v_glb:
         print("Worker {} populating tmpd.".format(os.getpid()))
     nr, tmpd, plain_files, s_config, net_file, log_file = populate_tmpd()
@@ -209,7 +217,7 @@ def evaluate_individual(individual):
     modify_net(individual, nr, plain_files, net_file)
     
     if v_glb:
-        print("Worker {} starting sumo.".format(os.getpid()))
+        print("Worker {} starting sumo in {}.".format(os.getpid(),str(tmpd)))
     returncode = execute_simulation(s_config)
     if v_glb:
         print("Worker {} sumo finished with returncode: {}.".format(os.getpid(), returncode))

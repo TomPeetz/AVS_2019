@@ -242,8 +242,6 @@ def main():
     else:
         generation_A_fitness = single_evaluate_population(generation_A)
     
-    pprint(generation_A_fitness)
-    
     if use_local_mt:
         pool.close()
         pool.join()
