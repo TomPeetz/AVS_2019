@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#Lib
 
 from pprint import pprint
 import os
@@ -67,35 +67,39 @@ def hack_for_cologne(plain_files):
 
 class Net_Repr:
     
-    net_nodes = {}
-    
-    net_edges = {}
-    net_edges_from_idx = {}
-    net_edges_to_idx = {}
-    
-    net_roundabouts = {}
-    net_roundabouts_edges_nodes_idx = {}
-    
-    net_connections = {}
-    net_connections_from_to_idx = {}
-    net_connections_from_idx = {}
-    net_connections_to_idx = {}
-    
-    art_id_ctr = 1
-    
     xmlNodeClass = sumolib.xml.compound_object("node", ["id", "type", "x", "y"])
     xmlEdgeClass = sumolib.xml.compound_object("edge", ["id", "from", "to", "priority", "type", "numLanes", "speed", "shape", "disallow"])
     xmlRoundaboutClass = sumolib.xml.compound_object("roundabout", ["nodes", "edges"])
     
-    loaded_nodes = None
-    loaded_edges = None
-    loaded_connections = None
-    
-    plain_files = None
-    
     def __init__(self, plain_files):
-        self.plain_files = plain_files
+        ###
+        self.new_id_ctr = 1
+    
+        self.net_nodes = {}
         
+        self.net_edges = {}
+        self.net_edges_from_idx = {}
+        self.net_edges_to_idx = {}
+        
+        self.net_roundabouts = {}
+        self.net_roundabouts_edges_nodes_idx = {}
+        
+        self.net_connections = {}
+        self.net_connections_from_to_idx = {}
+        self.net_connections_from_idx = {}
+        self.net_connections_to_idx = {}
+        
+        self.art_id_ctr = 1
+        
+        self.loaded_nodes = None
+        self.loaded_edges = None
+        self.loaded_connections = None
+        
+        self.plain_files = None
+        ###
+        
+        self.plain_files = plain_files
+                
         self.loaded_nodes = list(sumolib.xml.parse(plain_files["nod"], "nodes"))[0]
         if self.loaded_nodes.node:        
             for node in self.loaded_nodes.node:
@@ -288,6 +292,11 @@ class Net_Repr:
         with open(self.plain_files["con"], "w") as file_handle:
             file_handle.write(self.loaded_connections.toXML())
         
+    def get_new_id(self):
+        new_id = "X{}".format(self.new_id_ctr)
+        self.new_id_ctr += 1
+        return new_id
+    
 #Create temporary file
 def get_tmp_file_for_patch(tmpd):
     tmpf = tempfile.mkstemp(prefix="patch_", suffix=".xml", dir=tmpd, text=True)
@@ -491,7 +500,8 @@ def create_new_nodes(nr, node_id, modified_edges):
     for e_id in modified_edges:
         if not modified_edges[e_id]["needs_node"]:
             continue
-        new_nodes.append(nr.xmlNodeClass(["Node"+uuid.uuid4().hex, "priority", modified_edges[e_id]["x_i"], modified_edges[e_id]["y_i"]],{}))
+        # ~ new_nodes.append(nr.xmlNodeClass(["Node"+uuid.uuid4().hex, "priority", modified_edges[e_id]["x_i"], modified_edges[e_id]["y_i"]],{}))
+        new_nodes.append(nr.xmlNodeClass(["Node"+nr.get_new_id(), "priority", modified_edges[e_id]["x_i"], modified_edges[e_id]["y_i"]],{}))
     nr.add_new_nodes(new_nodes)
     
     return new_nodes
@@ -560,7 +570,8 @@ def create_new_edges(nr, node_id, node_x, node_y, node_r, new_nodes, modified_ed
         shape_str = ""
         for x,y in shape:
             shape_str += "{},{} ".format(x, y)
-        new_edge = nr.xmlEdgeClass(["tram rail_urban rail rail_electric ship", sid, "Edge"+uuid.uuid4().hex, str(max_num_lanes), "9", shape_str, "13.89", eid, "highway.primary"], {})
+        # ~ new_edge = nr.xmlEdgeClass(["tram rail_urban rail rail_electric ship", sid, "Edge"+uuid.uuid4().hex, str(max_num_lanes), "9", shape_str, "13.89", eid, "highway.primary"], {})
+        new_edge = nr.xmlEdgeClass(["tram rail_urban rail rail_electric ship", sid, nr.get_new_id(), str(max_num_lanes), "9", shape_str, "13.89", eid, "highway.primary"], {})
         new_edges.append(new_edge)
     
     nr.add_new_edges(new_edges)
@@ -586,11 +597,13 @@ def delete_unneeded_connections(nr, connection_relevant_edge_ids):
             art_ids = nr.get_connection_art_ids_by_from_to(e_id_A, e_id_B)
             if art_ids:
                 for art_id in art_ids:
-                    nr.remove_connection_by_art_id(art_id)
+                    if art_id in nr.net_connections:
+                        nr.remove_connection_by_art_id(art_id)
             art_ids = nr.get_connection_art_ids_by_from_to(e_id_B, e_id_A)
             if art_ids:
                 for art_id in art_ids:
-                    nr.remove_connection_by_art_id(art_id)
+                    if art_id in nr.net_connections:
+                        nr.remove_connection_by_art_id(art_id)
     
 def get_roundabout_center(roundabout_nodes):
     A, B, C, *_ = roundabout_nodes
@@ -615,7 +628,8 @@ def get_roundabout_center(roundabout_nodes):
     
 def create_new_node_and_delete_old_nodes(nr, new_node_x, new_node_y, roundabout_nodes):
     
-    new_node = nr.xmlNodeClass(["Node"+uuid.uuid4().hex, "priority", new_node_x, new_node_y],{})
+    # ~ new_node = nr.xmlNodeClass(["Node"+uuid.uuid4().hex, "priority", new_node_x, new_node_y],{})
+    new_node = nr.xmlNodeClass([nr.get_new_id(), "priority", new_node_x, new_node_y],{})
     
     nr.add_new_nodes([new_node])
     
@@ -673,10 +687,12 @@ def delete_connections_belonging_to_removed_edges(nr, connection_relevant_edge_i
     for e_id in uniqe_revelvant_edge_ids:
         
         for art_c_id in nr.get_connections_in_from_ids(e_id):
-            nr.remove_connection_by_art_id(art_c_id)
+            if art_c_id in nr.net_connections:
+                nr.remove_connection_by_art_id(art_c_id)
             
         for art_c_id in nr.get_connections_in_to_ids(e_id):
-            nr.remove_connection_by_art_id(art_c_id)
+            if art_c_id in nr.net_connections:
+                nr.remove_connection_by_art_id(art_c_id)
     
 def change_roundabout_to_node(roundabout_edge_ids_str, roundabout_node_ids_str, nr):
     
@@ -759,6 +775,5 @@ def change_roundabout_to_traffic_light_right_on_red(roundabout_edge_ids_str, rou
 
 def change_roundabout_to_right_of_way(roundabout_edge_ids_str, roundabout_node_ids_str, right_of_way_type, prio_edge_id_A, prio_edge_id_B, nr):
     node_id = change_roundabout_to_node(roundabout_edge_ids_str, roundabout_node_ids_str, nr)
-    pprint(node_id)
     change_intersection_right_of_way(node_id, right_of_way_type, prio_edge_id_A, prio_edge_id_B, nr)
 
