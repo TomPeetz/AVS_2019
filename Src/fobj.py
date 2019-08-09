@@ -1,4 +1,4 @@
-from os import path
+from os import path, mkdir
 from io import StringIO
 from ModMap import *
 from pprint import pprint
@@ -6,8 +6,6 @@ import yaml
 import shutil
 import traceback
 import json
-
-
 
 
 def get_base_path():
@@ -98,7 +96,6 @@ def prepare(x, config, data, debug):
     data['tempPath'] = str(tmpd)
     tmpsim = path.join(tmpd, 'Simulation')
     modifiednet = path.join(tmpsim, 'modified.net.xml')
-    pprint(tmpsim)
     shutil.copytree(sourcesim, tmpsim)
     netrepr.write_to_plain()
     cnvt_plain_to_net(netcnvt_bin=netconv, plain_files=plain_files, new_net_path=modifiednet, verbose=False)
@@ -107,11 +104,13 @@ def prepare(x, config, data, debug):
 
     # ~ subprocess.Popen(args = [os.path.join(os.environ['SUMO_HOME'], 'tools', 'randomTrips.py'), '-n', modifiednet, '-o', trips]).wait()
 
-    return path.join(tmpsim, 'Simulation.sumocfg')
+    return path.join(tmpsim, 'Simulation.sumocfg'), tmpd
 
 
-def sumo(x):
-    f = open("debug.log", "w")
+def sumo(decisionVector, generation):
+    workdir = "workdir-%s" % uuid.uuid4().hex
+    mkdir(workdir)
+    f = open(path.join(workdir, "debug.log"), "w")
 
     basepath = get_base_path()
     f.write("BasePath: %s\n" % basepath)
@@ -121,16 +120,16 @@ def sumo(x):
 
     try:
         data = {}
-        data['decisionvector'] = x
+        data['decisionvector'] = decisionVector
         data['penaltyValue'] = config['penaltyValue']
         data['resultsPath'] = str(path.abspath('.'))
-
+        data['generation'] = generation
 
         f.write("Decision vector:\n")
-        pprint(x, f)
+        pprint(decisionVector, f)
         f.write("\n")
 
-        cfg = prepare(x, config, data, f)
+        cfg, tmpd = prepare(decisionVector, config, data, f)
         args = ["sumo", "-c", cfg]#, "--threads", "1"]
 
         with subprocess.Popen(args,
@@ -145,6 +144,7 @@ def sumo(x):
 
             stdout = list(map(lambda x: x, stdout.decode('utf-8').splitlines()))
             #stderr = stderr.decode('utf-8').splitlines()
+        shutil.rmtree(tmpd)
 
         sidx = list(map(lambda x: 'Statistics (avg):' in x, stdout)).index(True)
         eidx = list(map(lambda x: 'DepartDelay' in x, stdout)).index(True)
@@ -164,7 +164,7 @@ def sumo(x):
         data['statistics'] = y
         data['funVal'] = fun_val
 
-        with open('data.json', 'w') as c:
+        with open(path.join(workdir, 'data.json'), 'w') as c:
             c.write(json.dumps(data))
             c.close()
 
