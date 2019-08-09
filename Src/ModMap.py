@@ -586,11 +586,13 @@ def delete_unneeded_connections(nr, connection_relevant_edge_ids):
             art_ids = nr.get_connection_art_ids_by_from_to(e_id_A, e_id_B)
             if art_ids:
                 for art_id in art_ids:
-                    nr.remove_connection_by_art_id(art_id)
+                    if art_id in nr.net_connections:
+                        nr.remove_connection_by_art_id(art_id)
             art_ids = nr.get_connection_art_ids_by_from_to(e_id_B, e_id_A)
             if art_ids:
                 for art_id in art_ids:
-                    nr.remove_connection_by_art_id(art_id)
+                    if art_id in nr.net_connections:
+                        nr.remove_connection_by_art_id(art_id)
     
 def get_roundabout_center(roundabout_nodes):
     A, B, C, *_ = roundabout_nodes
@@ -673,10 +675,12 @@ def delete_connections_belonging_to_removed_edges(nr, connection_relevant_edge_i
     for e_id in uniqe_revelvant_edge_ids:
         
         for art_c_id in nr.get_connections_in_from_ids(e_id):
-            nr.remove_connection_by_art_id(art_c_id)
+            if art_c_id in nr.net_connections:
+                nr.remove_connection_by_art_id(art_c_id)
             
         for art_c_id in nr.get_connections_in_to_ids(e_id):
-            nr.remove_connection_by_art_id(art_c_id)
+            if art_c_id in nr.net_connections:
+                nr.remove_connection_by_art_id(art_c_id)
     
 def change_roundabout_to_node(roundabout_edge_ids_str, roundabout_node_ids_str, nr):
     
@@ -759,6 +763,5 @@ def change_roundabout_to_traffic_light_right_on_red(roundabout_edge_ids_str, rou
 
 def change_roundabout_to_right_of_way(roundabout_edge_ids_str, roundabout_node_ids_str, right_of_way_type, prio_edge_id_A, prio_edge_id_B, nr):
     node_id = change_roundabout_to_node(roundabout_edge_ids_str, roundabout_node_ids_str, nr)
-    pprint(node_id)
     change_intersection_right_of_way(node_id, right_of_way_type, prio_edge_id_A, prio_edge_id_B, nr)
 
