@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+### Beispielaufruf
+# $./GenEvo.py -v -l -c Simulation/s1_test.sumocfg -s s1_searchspace.json -o Simulation/s1_best.net.xml -p 72 -g 16 -k 20 -x 0.05 -r 012345abcdef6789
+
 from pprint import pprint
 import json
 from pathlib import Path
@@ -135,13 +138,13 @@ def generate_new_generation(old_generation, population_size, genome, k_num, muta
     
 def single_evaluate_population(population):
     results = []
-    for individual in filter(lambda x: x[2] is False ,population):
+    for individual in filter(lambda x: x[2] is False, population):
         results.append(evaluate_individual(individual))
     return results
    
 def local_mp_evaluate_population(population, pool):
     async_results=[]
-    for individual in filter(lambda x: x[2] is False ,population):
+    for individual in filter(lambda x: x[2] is False, population):
         async_results.append(pool.apply_async(evaluate_individual,(individual,)))
     results=[]
     for result in async_results:
@@ -154,7 +157,9 @@ def mpi_evaluate_population(population):
 
 def main():
     
-    err="{} -c <simulation.sumocfg (path)> -s <searchspace.json (path)> -p <Population size (int)> -g <Number of generations (int)> [-r <Seed (hex string)> -k <crossover points (int)> -x <mutation rate 0..1 (float)> -v verbose (specify multiple times for more messages) [-l local multiprocessing | -m mpi]]"
+    t_t_0 = time.monotonic()
+    
+    err="{} -c <simulation.sumocfg (path)> -s <searchspace.json (path)> -p <Population size (int)> -g <Number of generations (int)> [-r <Seed (hex string)> -k <crossover points (int)> -x <mutation rate 0..1 (float)> -o <best net (Path)> -v verbose (specify multiple times for more messages) [-l local multiprocessing | -m mpi]]"
     
     individual_id_ctr = 1
     
@@ -163,6 +168,7 @@ def main():
     population_size = False
     number_of_generations = False
     seed = False
+    best_net_path = False
     v = 0
     use_local_mt = False
     use_mpi = False
@@ -170,7 +176,7 @@ def main():
     mutation_rate = False
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "vlmc:s:p:g:r:k:x:")
+        opts, args = getopt.getopt(sys.argv[1:], "vlmc:s:p:g:r:k:x:o:")
     except getopt.GetoptError:
         print(err.format(sys.argv[0]))
         sys.exit(1)
@@ -196,6 +202,8 @@ def main():
             k_num = a
         elif o == "-x":
             mutation_rate = a
+        elif o == "-o":
+            best_net_path = a
         
     if simulation_cfg_path is False or searchspace_path is False or population_size is False or number_of_generations is False:
         print(err.format(sys.argv[0]), file=sys.stderr)
@@ -222,6 +230,13 @@ def main():
         print("No valid sumo config file found!", file=sys.stderr)
         print(err.format(sys.argv[0]), file=sys.stderr)
         sys.exit(1)
+    
+    if not best_net_path is False:
+        best_net_path = Path(best_net_path).resolve()
+        if best_net_path.is_dir() or not best_net_path.parent.is_dir():
+            print("No valid location for best net specified!", file=sys.stderr)
+            print(err.format(sys.argv[0]), file=sys.stderr)
+            sys.exit(1)
     
     conf_tree = ET.parse(simulation_cfg_path)
     conf_root = conf_tree.getroot()
@@ -378,11 +393,19 @@ def main():
             fittest_individual = [individual, generation_ctr]
     
     if v >= GenEvoConstants.V_STAT:
-        print("Current generation is {}. Fittest individual is from generation {} and has a fitness value of {}.".format(generation_ctr, fittest_individual[1], fittest_individual[0][2]))
+        print("Current generation is {}. Fittest individuals name is {} and it has a fitness value of {}.".format(generation_ctr, fittest_individual[0][0], fittest_individual[0][2]))
     
     while generation_ctr < number_of_generations:
+        if v >= GenEvoConstants.V_STAT:
+            t_0 = time.monotonic()
+            t_A_0 = t_0
         generation = generate_new_generation(generation, population_size, genome, k_num, mutation_rate, stable_random, individual_id_ctr)
         individual_id_ctr += population_size/2
+        if v >= GenEvoConstants.V_INF:
+            t_1 = time.monotonic()
+            print("Generation {} created in {}s.".format(generation_ctr+1, t_1-t_0))
+        if v >= GenEvoConstants.V_STAT:
+            t_0 = time.monotonic()
         
         if use_local_mt:
             generation_fitness = local_mp_evaluate_population(generation, pool)
@@ -392,9 +415,20 @@ def main():
         else:
             generation_fitness = single_evaluate_population(generation)
         
+        if v >= GenEvoConstants.V_STAT:
+            t_1 = time.monotonic()
+            t_E = t_1 - t_0
+        if v >= GenEvoConstants.V_DBG:
+            print("Evaluating the new individuals took {}s.".format(t_E))
+            t_0 = time.monotonic()
         apply_fitness_to_individuals(generation, generation_fitness)
         generation_ctr += 1
+        if v >= GenEvoConstants.V_INF:
+            t_1 = time.monotonic()
+            print("Calculated fitness applied to individuals in {}s.".format(t_1-t_0))
         
+        if v >= GenEvoConstants.V_INF:
+            t_0 = time.monotonic()
         fittest_individual_in_generation = [generation[0], generation_ctr]
         for individual in generation:
             if individual[2] < fittest_individual_in_generation[0][2]:
@@ -402,17 +436,39 @@ def main():
         
         if fittest_individual_in_generation[0][2] < fittest_individual[0][2]:
             fittest_individual = fittest_individual_in_generation
-        
+        if v >= GenEvoConstants.V_INF:
+            t_1 = time.monotonic()
         if v >= GenEvoConstants.V_STAT:
             print("Current generation is {}. Fittest individuals name is {}, it has a fitness value of {}.".format(generation_ctr, fittest_individual_in_generation[0][0], fittest_individual_in_generation[0][2]))
             print("Overall fittest individuals name is {}. It is from generation {} and has a fitness value of {}.".format(fittest_individual[0][0], fittest_individual[1], fittest_individual[0][2]))
-        
+        if v >= GenEvoConstants.V_INF:
+            print("Fittest individual found in {}s.".format(t_1-t_0))
+        if v >= GenEvoConstants.V_STAT:
+            t_A_1 = time.monotonic()
+            t_A = t_A_1 - t_A_0
+            print("Generation took {}s, of which {}s where spend evaluating individuals and {}s managing the generation.".format(t_A, t_E, t_A - t_E))
+            
     if use_local_mt:
         pool.close()
         pool.join()
     elif use_mpi:
         #TODO: Do cleanups for MPI if needed
         pass
+    
+    if not best_net_path is False:
+        netcnvt_bin = load_netconvert_binary()
+        tmpd, best_plain_files = cnvt_net_to_plain(net_path, netcnvt_bin, "best", False)
+        hack_for_cologne(best_plain_files)
+        best_nr = Net_Repr(best_plain_files)
+        modify_net(fittest_individual[0], best_nr, best_plain_files, best_net_path, netcnvt_bin)
+        rm_tmpd_and_files(tmpd)
+        
+    t_t_1 = time.monotonic()
+    if v >= GenEvoConstants.V_STAT:
+        print("\n*** Result ***")
+        print("Tested {} individuals in {} generations. Best individual was {} from generation {} with fitness {}.".format(individual_id_ctr-1, generation_ctr, fittest_individual[0][0], fittest_individual[1], fittest_individual[0][2]))
+        print("Overall runtime {}s.".format(t_t_1 - t_t_0))
+        print("**************")
     
 if __name__=="__main__":
     main()

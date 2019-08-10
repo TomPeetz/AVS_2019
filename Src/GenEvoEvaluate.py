@@ -138,7 +138,7 @@ def populate_tmpd():
     
     return nr, tmpd, plain_files, s_config, net_file, log_file
     
-def modify_net(individual, nr, plain_files, net_file):
+def modify_net(individual, nr, plain_files, net_file, netcnvt_bin):
     _, dna, _, _ = individual
     
     for g_type, g_id, g_mod in dna:
@@ -183,7 +183,7 @@ def modify_net(individual, nr, plain_files, net_file):
                 pass
     
     nr.write_to_plain()
-    cnvt_plain_to_net(netcnvt, plain_files, net_file, False)
+    cnvt_plain_to_net(netcnvt_bin, plain_files, net_file, False)
     
 def execute_simulation(s_config):
     res = subprocess.run([sumo_bin, str(s_config)],capture_output=True,cwd=s_config.parent)
@@ -215,9 +215,9 @@ def evaluate_individual(individual):
     
     if v_glb >= GenEvoConstants.V_DBG:
         print("Worker {} modifing net.".format(os.getpid()))
-    modify_net(individual, nr, plain_files, net_file)
+    modify_net(individual, nr, plain_files, net_file, netcnvt)
     
-    if v_glb >= GenEvoConstants.V_INF:
+    if v_glb >= GenEvoConstants.V_DBG:
         print("Worker {} starting sumo in {}.".format(os.getpid(),str(tmpd)))
     returncode = execute_simulation(s_config)
     if v_glb >= GenEvoConstants.V_INF:
