@@ -15,3 +15,8 @@ RA_SEP="  "
 II_SEP=" "
 
 NO_FITNESS=float("inf")
+
+V_NO = 0
+V_STAT = 1
+V_INF = 2
+V_DBG = 3

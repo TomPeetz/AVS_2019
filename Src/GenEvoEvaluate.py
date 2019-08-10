@@ -65,7 +65,7 @@ def initialize_worker(sumo_cfg_str, trips_file_str, vtypes_file_str, plain_con_s
     global sumo_bin
     sumo_bin = sumolib.checkBinary("sumo")
     
-    if v_glb:
+    if v_glb >= GenEvoConstants.V_DBG:
         print("Worker {} initializing.".format(os.getpid()))
     
     plain_con = plain_con_str
@@ -94,7 +94,7 @@ def initialize_worker(sumo_cfg_str, trips_file_str, vtypes_file_str, plain_con_s
         os.unlink(f)
     os.rmdir(tmpd)
     
-    if v_glb:
+    if v_glb >= GenEvoConstants.V_DBG:
         print("Worker {} ready.".format(os.getpid()))
         
 
@@ -139,7 +139,7 @@ def populate_tmpd():
     return nr, tmpd, plain_files, s_config, net_file, log_file
     
 def modify_net(individual, nr, plain_files, net_file):
-    _, dna, _ = individual
+    _, dna, _, _ = individual
     
     for g_type, g_id, g_mod in dna:
         if g_type == GenEvoConstants.INTER_NODE:
@@ -209,25 +209,25 @@ def evaluate_individual(individual):
     # ~ pprint("dna")
     # ~ pprint(hashlib.sha1(str(dna).encode("UTF-8")).hexdigest())
     
-    if v_glb:
+    if v_glb >= GenEvoConstants.V_DBG:
         print("Worker {} populating tmpd.".format(os.getpid()))
     nr, tmpd, plain_files, s_config, net_file, log_file = populate_tmpd()
     
-    if v_glb:
+    if v_glb >= GenEvoConstants.V_DBG:
         print("Worker {} modifing net.".format(os.getpid()))
     modify_net(individual, nr, plain_files, net_file)
     
-    if v_glb:
+    if v_glb >= GenEvoConstants.V_INF:
         print("Worker {} starting sumo in {}.".format(os.getpid(),str(tmpd)))
     returncode = execute_simulation(s_config)
-    if v_glb:
+    if v_glb >= GenEvoConstants.V_INF:
         print("Worker {} sumo finished with returncode: {}.".format(os.getpid(), returncode))
     
     time_loss = extract_results(tmpd)
-    if v_glb:
+    if v_glb >= GenEvoConstants.V_INF:
         print("Worker {} sumo computed TimeLoss: {}.".format(os.getpid(), time_loss))
     
-    if v_glb:
+    if v_glb >= GenEvoConstants.V_DBG:
         print("Worker {} cleaning up.".format(os.getpid()))
     cleanup(tmpd)
     

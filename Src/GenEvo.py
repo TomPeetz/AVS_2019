@@ -24,26 +24,124 @@ else:
 
 import sumolib
 
-def initialize_first_generation(genome, population_size, stable_random, id_ctr):
+
+def initialize_first_generation(genome, population_size, stable_random, iid_ctr):
     population = []
     for _ in range(population_size):
         dna = []
         for gene in genome:
+            # ( gene[0] <=> Type (Roundabout, Node), gene[1] <=> Id, gene[2] <=> Operation from list of possible operations )
             dna.append((gene[0], gene[1], stable_random.choice(gene[2])))
-        population.append([id_ctr, dna, False])
-        id_ctr += 1
-    population.sort(key = lambda x: x[0])
+        #Individual = [ id, dna, fitness, accumulated_rank_fitness ]
+        population.append([iid_ctr, dna, False, False])
+        iid_ctr += 1
     return population
 
+def generate_genom_from_searchspace(searchspace):
+    genome = []
+    for intersection in searchspace["intersections"]:
+        intersection_id = intersection["id"]
+        allowed_modifications = []
+        for modification in intersection["allowedModifications"]:
+            allowed_modifications.append(tuple(modification.split(" ")))
+        genome.append((GenEvoConstants.INTER_NODE, intersection_id, tuple(allowed_modifications)))
+    for roundabout in searchspace["roundabouts"]:
+        roundabout_id = roundabout["id"]
+        allowed_modifications = []
+        for modification in roundabout["allowedModifications"]:
+            allowed_modifications.append(tuple(modification.split(" ")))
+        genome.append((GenEvoConstants.INTER_ROUNDABOUT, roundabout_id, tuple(allowed_modifications)))
+    return genome
+    
+def apply_fitness_to_individuals(generation, fitness):
+    generation.sort(key = lambda x: x[0])
+    fitness.sort(key = lambda x: x[0])
+    i=0
+    for f in fitness:
+        while generation[i][0] < f[0]:
+            i+=1
+        generation[i][2] = f[1]
+
+def generate_new_generation(old_generation, population_size, genome, k_num, mutation_rate, stable_random, iid_ctr):
+    
+    old_generation.sort(key = lambda x: x[2])
+    
+    ### LRS after: JEBARI, Khalid; MADIAFI, Mohammed. Selection methods for genetic algorithms. International Journal of Emerging Sciences, 2013, 3. Jg., Nr. 4, S. 333-344.    
+    total_rank_fitness = (len(old_generation)+1) * len(old_generation)/2.
+    
+    accumulated_rank_fitness = 0.
+    for rank in range(len(old_generation)):
+        accumulated_rank_fitness += (len(old_generation) - rank) / total_rank_fitness
+        old_generation[rank][3] = accumulated_rank_fitness
+        
+    number_of_parents = population_size / 2
+    number_of_parents_selected = 0
+    selected_parents = []
+    while number_of_parents_selected < number_of_parents:
+        alpha = stable_random.random()
+        parent_idx = 0
+        for i in range(len(old_generation)):
+            if alpha < old_generation[i][3]:
+                parent_idx = i
+                break
+        
+        selected_parents.append(old_generation[parent_idx])
+        number_of_parents_selected+=1
+            
+    ### k-point crossover after: WRIGHT, Alden H. Genetic algorithms for real parameter optimization. In: Foundations of genetic algorithms. Elsevier, 1991. S. 205-218.
+    #Adapted from floating point values for discrete values
+    children = []
+    
+    for i in range(0, len(selected_parents), 2):
+        p_A = selected_parents[i]
+        p_B = selected_parents[i+1]
+        
+        crossover_points = random.sample(range(0, len(p_A[1])), k_num)
+        #Assure the dna is completely copied
+        if len(p_A[1]) not in crossover_points:
+            crossover_points.append(len(p_A[1]))
+        
+        crossover_points.sort()
+        c_A_dna = []
+        c_B_dna = []
+        
+        j = 0
+        for x_point in crossover_points:
+            while j < x_point:
+                c_A_dna.append(p_A[1][j])
+                c_B_dna.append(p_B[1][j])
+                j+=1
+            p_tmp = p_B
+            p_B = p_A
+            p_A = p_tmp
+        
+        children.append([iid_ctr, c_A_dna, False, False])
+        iid_ctr += 1
+        children.append([iid_ctr, c_A_dna, False, False])
+        iid_ctr += 1
+    
+    ### Creep Mutation after: SONI, Nitasha; KUMAR, Tapas. Study of various mutation operators in genetic algorithms. International Journal of Computer Science and Information Technologies, 2014, 5. Jg., Nr. 3, S. 4519-4521.
+    #Adapted from floating point values to discret values
+    for child in children:
+        for i in range(len(child[1])):
+            alpha = stable_random.random()
+            if alpha > mutation_rate:
+                continue
+            gene = genome[i]
+            child[1][i] = (gene[0], gene[1], stable_random.choice(gene[2]))
+            
+    new_generation = selected_parents + children
+    return new_generation
+    
 def single_evaluate_population(population):
     results = []
-    for individual in population:
+    for individual in filter(lambda x: x[2] is False ,population):
         results.append(evaluate_individual(individual))
     return results
    
 def local_mp_evaluate_population(population, pool):
     async_results=[]
-    for individual in population:
+    for individual in filter(lambda x: x[2] is False ,population):
         async_results.append(pool.apply_async(evaluate_individual,(individual,)))
     results=[]
     for result in async_results:
@@ -56,7 +154,7 @@ def mpi_evaluate_population(population):
 
 def main():
     
-    err="{} -c <simulation.sumocfg (path)> -s <searchspace.json (path)> -p <Population size (int)> -g <Number of generations (int)> [-r <Seed (hex string)> -v verbose [-l local multiprocessing | -m mpi]]"
+    err="{} -c <simulation.sumocfg (path)> -s <searchspace.json (path)> -p <Population size (int)> -g <Number of generations (int)> [-r <Seed (hex string)> -k <crossover points (int)> -x <mutation rate 0..1 (float)> -v verbose (specify multiple times for more messages) [-l local multiprocessing | -m mpi]]"
     
     individual_id_ctr = 1
     
@@ -65,12 +163,14 @@ def main():
     population_size = False
     number_of_generations = False
     seed = False
-    v = False
+    v = 0
     use_local_mt = False
     use_mpi = False
+    k_num = False
+    mutation_rate = False
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "vlmc:s:p:g:r:")
+        opts, args = getopt.getopt(sys.argv[1:], "vlmc:s:p:g:r:k:x:")
     except getopt.GetoptError:
         print(err.format(sys.argv[0]))
         sys.exit(1)
@@ -87,36 +187,40 @@ def main():
         elif o == "-r":
             seed = a
         elif o == "-v":
-            v = True
+            v += 1
         elif o == "-l":
             use_local_mt = True
         elif o == "-m":
             use_mpi = True
+        elif o == "-k":
+            k_num = a
+        elif o == "-x":
+            mutation_rate = a
         
     if simulation_cfg_path is False or searchspace_path is False or population_size is False or number_of_generations is False:
-        print(err.format(sys.argv[0]))
+        print(err.format(sys.argv[0]), file=sys.stderr)
         sys.exit(1)
     
     #TODO: Remove if MPI is ready
     if use_mpi:
-        print("Not implemented!")
+        print("Not implemented!", file=sys.stderr)
         sys.exit(1)
     
     if use_local_mt and use_mpi:
         print("Only local multiprocessing xor mpi!")
-        print(err.format(sys.argv[0]))
+        print(err.format(sys.argv[0]), file=sys.stderr)
         sys.exit(1)
     
     searchspace_path = Path(searchspace_path).resolve()
     if not searchspace_path.exists() or searchspace_path.is_dir():
-        print("No valid searchspace file found!")
-        print(err.format(sys.argv[0]))
+        print("No valid searchspace file found!", file=sys.stderr)
+        print(err.format(sys.argv[0]), file=sys.stderr)
         sys.exit(1)
         
     simulation_cfg_path = Path(simulation_cfg_path).resolve()
     if not simulation_cfg_path.exists() or searchspace_path.is_dir():
-        print("No valid sumo config file found!")
-        print(err.format(sys.argv[0]))
+        print("No valid sumo config file found!", file=sys.stderr)
+        print(err.format(sys.argv[0]), file=sys.stderr)
         sys.exit(1)
     
     conf_tree = ET.parse(simulation_cfg_path)
@@ -126,20 +230,53 @@ def main():
     vtypes_path = Path(simulation_cfg_path.parent, conf_root.find("input").find("additional-files").attrib["value"]).resolve()
     del conf_root
     del conf_tree
-    if v:
+    if v >= GenEvoConstants.V_INF:
         print("Using net file: <{}>.".format(str(net_path)))
         print("Using trips file: <{}>.".format(str(trips_path)))
         
     try:
         population_size = int(population_size)
         number_of_generations = int(number_of_generations)
+        if population_size < 3 or population_size % 2 != 0:
+            print("Please specify only even numbers greater than 2 for population size!", file=sys.stderr)
+            raise ValueError()
+        if number_of_generations < 2:
+            print("Please specify a number of generations greater than 1!", file=sys.stderr)
+            raise ValueError()
     except ValueError:
-        print("Population size and number of generations must be integers!")
-        print(err.format(sys.argv[0]))
+        print("Population size and number of generations and number of crossover points must be integers!", file=sys.stderr)
+        print(err.format(sys.argv[0]), file=sys.stderr)
         sys.exit(1)
     
-    if v:
+    if v >= GenEvoConstants.V_INF:
         print("Population size is {}; Number of generations is {}".format(population_size, number_of_generations))
+    
+    if k_num is False:
+        k_num = 20
+    else:
+        try:
+            k_num = int(k_num)
+            if k_num < 1:
+                raise ValueError()
+        except ValueError:
+            print("Number of crossover points must be nonnegativ integer", file=sys.stderr)
+            print(err.format(sys.argv[0]), file=sys.stderr)
+            sys.exit(1)
+    
+    if mutation_rate is False:
+        mutation_rate = 0.05
+    else:
+        try:
+            mutation_rate = float(mutation_rate)
+            if mutation_rate < 0. or mutation_rate > 1.:
+                raise ValueError
+        except ValueError:
+            print("Mutation rate must be a floating point value between 0 and 1!", file=sys.stderr)
+            print(err.format(sys.argv[0]), file=sys.stderr)
+            sys.exit(1)
+    
+    if v >= GenEvoConstants.V_INF:
+        print("Using {}-point crossover and mutation rate of {}.".format(k_num, mutation_rate))
     
     if seed is False:
         seed = int(binascii.hexlify(os.urandom(16)), 16)
@@ -147,37 +284,23 @@ def main():
         try:
             seed = int(seed, 16)
         except ValueError:
-            print("Seed has to be a hexadecimal string!")
-            print(err.format(sys.argv[0]))
+            print("Seed has to be a hexadecimal string!", file=sys.stderr)
+            print(err.format(sys.argv[0]), file=sys.stderr)
             sys.exit(1)
     stable_random = random.Random()
     stable_random.seed(seed)
     
-    if v:
+    if v >= GenEvoConstants.V_INF:
         print("Using seed: {0:x}".format(seed))
     
     with open(searchspace_path, "r") as f:
         searchspace = json.loads(f.read())
     
-    if v:
+    if v >= GenEvoConstants.V_INF:
         print("Searchspace: {} intersections and {} roundabouts found.".format(len(searchspace["intersections"]), len(searchspace["roundabouts"])))
     
-    genome = []
-    for intersection in searchspace["intersections"]:
-        intersection_id = intersection["id"]
-        allowed_modifications = []
-        for modification in intersection["allowedModifications"]:
-            allowed_modifications.append(tuple(modification.split(" ")))
-        genome.append((GenEvoConstants.INTER_NODE, intersection_id, tuple(allowed_modifications)))
-    for roundabout in searchspace["roundabouts"]:
-        roundabout_id = roundabout["id"]
-        allowed_modifications = []
-        for modification in roundabout["allowedModifications"]:
-            allowed_modifications.append(tuple(modification.split(" ")))
-        genome.append((GenEvoConstants.INTER_ROUNDABOUT, roundabout_id, tuple(allowed_modifications)))
-    
     ##Prepare workers
-    if v:
+    if v >= GenEvoConstants.V_DBG:
         print("Start preparing workers...", end="", flush=True)
     
     with open(simulation_cfg_path, "r") as f:
@@ -204,20 +327,20 @@ def main():
     
     rm_tmpd_and_files(tmpd)
     
-    if v:
+    if v >= GenEvoConstants.V_DBG:
         print(" initializing workers ...", end="", flush=True)
     if use_local_mt:
-        if v:
+        if v >= GenEvoConstants.V_DBG:
             print(" for local multiprocessing.")
         pool_size = cpu_count()
         pool = Pool(pool_size, initialize_worker, [simulation_cfg_str, trips_str, vtypes_str, plain_con_str, plain_edg_str, plain_nod_str, plain_tll_str, plain_typ_str, v])
     elif use_mpi:
-        if v:
+        if v >= GenEvoConstants.V_DBG:
             print(" for mpi.")
         #TODO: Prepare MPI
         #TODO: create all variables which are needed and at least initialize workers by calling initialize_worker for each one.
     else:
-        if v:
+        if v >= GenEvoConstants.V_DBG:
             print(" for single threading.")
         initialize_worker(simulation_cfg_str, trips_str, vtypes_str, plain_con_str, plain_edg_str, plain_nod_str, plain_tll_str, plain_typ_str, v)
     
@@ -232,41 +355,58 @@ def main():
     del vtypes_str
     ##
     
+    genome = generate_genom_from_searchspace(searchspace)
+    
     #possible gen only population_size - 1 individuals and inject a special individual with all genes do_nothing
-    generation_A = initialize_first_generation(genome, population_size, stable_random, individual_id_ctr)
-    individual_id_ctr += population_size
-    # ~ generation_B = initialize_first_generation(genome, population_size, stable_random, individual_id_ctr)
+    generation = initialize_first_generation(genome, population_size, stable_random, individual_id_ctr)
     individual_id_ctr += population_size
     
     if use_local_mt:
-        generation_A_fitness = local_mp_evaluate_population(generation_A, pool)
-        # ~ generation_B_fitness = local_mp_evaluate_population(generation_B, pool)
+        generation_fitness = local_mp_evaluate_population(generation, pool)
     elif use_mpi:
         #TODO: Call mpi_evaluate_population with approbiate parameters
         pass
     else:
-        generation_A_fitness = single_evaluate_population(generation_A)
-        # ~ generation_B_fitness = single_evaluate_population(generation_B)
+        generation_fitness = single_evaluate_population(generation)
     
-    generation_A_fitness.sort(key = lambda x: x[0])
-    for individual, fitness in zip(generation_A, generation_A_fitness):
-        individual[2] = fitness[1]
+    apply_fitness_to_individuals(generation, generation_fitness)
+    generation_ctr = 0
     
-    # ~ generation_B_fitness.sort(key = lambda x: x[0])
-    # ~ for individual, fitness in zip(generation_B, generation_B_fitness):
-        # ~ individual[2] = fitness[1]
+    fittest_individual = [generation[0], generation_ctr]
+    for individual in generation:
+        if individual[2] < fittest_individual[0][2]:
+            fittest_individual = [individual, generation_ctr]
     
-    ###LRS after: JEBARI, Khalid; MADIAFI, Mohammed. Selection methods for genetic algorithms. International Journal of Emerging Sciences, 2013, 3. Jg., Nr. 4, S. 333-344.
+    if v >= GenEvoConstants.V_STAT:
+        print("Current generation is {}. Fittest individual is from generation {} and has a fitness value of {}.".format(generation_ctr, fittest_individual[1], fittest_individual[0][2]))
     
-    
-    # ~ sum_v = 1 / ( len(generation_A) - 2.001 )
-    
-    # ~ selected_individuals = []
-    # ~ for individual in generation_A:
-        # ~ alpha = stable_random.uniform(0, sum_v)
+    while generation_ctr < number_of_generations:
+        generation = generate_new_generation(generation, population_size, genome, k_num, mutation_rate, stable_random, individual_id_ctr)
+        individual_id_ctr += population_size/2
         
+        if use_local_mt:
+            generation_fitness = local_mp_evaluate_population(generation, pool)
+        elif use_mpi:
+            #TODO: Call mpi_evaluate_population with approbiate parameters
+            pass
+        else:
+            generation_fitness = single_evaluate_population(generation)
         
-    
+        apply_fitness_to_individuals(generation, generation_fitness)
+        generation_ctr += 1
+        
+        fittest_individual_in_generation = [generation[0], generation_ctr]
+        for individual in generation:
+            if individual[2] < fittest_individual_in_generation[0][2]:
+                fittest_individual_in_generation = [individual, generation_ctr]
+        
+        if fittest_individual_in_generation[0][2] < fittest_individual[0][2]:
+            fittest_individual = fittest_individual_in_generation
+        
+        if v >= GenEvoConstants.V_STAT:
+            print("Current generation is {}. Fittest individuals name is {}, it has a fitness value of {}.".format(generation_ctr, fittest_individual_in_generation[0][0], fittest_individual_in_generation[0][2]))
+            print("Overall fittest individuals name is {}. It is from generation {} and has a fitness value of {}.".format(fittest_individual[0][0], fittest_individual[1], fittest_individual[0][2]))
+        
     if use_local_mt:
         pool.close()
         pool.join()
@@ -276,21 +416,3 @@ def main():
     
 if __name__=="__main__":
     main()
-
-
-#TODO:
-# Main
-# Suchraum laden
-# 1. Generation anlegen (Individuen generieren)
-#                                               # Bewertungsfunktion ausfuehren
-                      
-    #Suchraum laden
-    
-    #
-                              # Resultat zurueckgeben
-# 2. Generation erzeugen (Mix Gen 1 & Ursprung)
-# ...
-
-# Abbruchbedingung erreichen
-# Bestes Ergebnis zurueck
-
