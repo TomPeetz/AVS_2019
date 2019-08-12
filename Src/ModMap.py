@@ -51,8 +51,7 @@ def cnvt_net_to_plain(net_path, netcnvt_bin, plain_output_prefix, verbose=False)
 #Pack changed plain files into new net.xml
 def cnvt_plain_to_net(netcnvt_bin, plain_files, new_net_path, verbose):
     
-    res = subprocess.run([netcnvt_bin, "-n", plain_files["nod"], "-e", plain_files["edg"],
-                            "-x", plain_files["con"], "-i", plain_files["tll"], "-t", plain_files["typ"] , "-o", str(new_net_path)], capture_output=True)
+    res = subprocess.run([netcnvt_bin, "-n", str(plain_files["nod"]), "-e", str(plain_files["edg"]), "-x", str(plain_files["con"]), "-i", str(plain_files["tll"]), "-t", str(plain_files["typ"]) , "-o", str(new_net_path)], capture_output=True)
     if verbose:
         print("Output from: ")
         print(*res.args, sep=" ")
