@@ -12,12 +12,14 @@ import random
 import getopt
 import binascii
 import time
+import io
 import xml.etree.ElementTree as ET
 from multiprocessing import cpu_count, Pool
-from GenEvoEvaluate import *
+import GenEvoEvaluate 
 from ModMap import *
 import GenEvoConstants
 
+from mpi4py import futures
 
 if 'SUMO_HOME' in os.environ:
     tools = os.path.join(os.environ['SUMO_HOME'], 'tools')
@@ -139,21 +141,26 @@ def generate_new_generation(old_generation, population_size, genome, k_num, muta
 def single_evaluate_population(population):
     results = []
     for individual in filter(lambda x: x[2] is False, population):
-        results.append(evaluate_individual(individual))
+        results.append(GenEvoEvaluate.evaluate_individual(individual, False))
     return results
    
 def local_mp_evaluate_population(population, pool):
     async_results=[]
     for individual in filter(lambda x: x[2] is False, population):
-        async_results.append(pool.apply_async(evaluate_individual,(individual,)))
+        async_results.append(pool.apply_async(GenEvoEvaluate.evaluate_individual,(individual, False)))
     results=[]
     for result in async_results:
         results.append(result.get())
     return results
     
-#TODO: Implement MPI similar to local_mp_evalutate_population
-def mpi_evaluate_population(population):
-    pass    
+def mpi_evaluate_population(population, mpi_pool):
+    async_results=[]
+    for individual in filter(lambda x: x[2] is False, population):
+        async_results.append(mpi_pool.submit(GenEvoEvaluate.evaluate_individual, individual, True))
+    results=[]
+    for result in async_results:
+        results.append(result.result())
+    return results
 
 def main():
     
@@ -210,9 +217,9 @@ def main():
         sys.exit(1)
     
     #TODO: Remove if MPI is ready
-    if use_mpi:
-        print("Not implemented!", file=sys.stderr)
-        sys.exit(1)
+    # ~ if use_mpi:
+        # ~ print("Not implemented!", file=sys.stderr)
+        # ~ sys.exit(1)
     
     if use_local_mt and use_mpi:
         print("Only local multiprocessing xor mpi!")
@@ -340,6 +347,8 @@ def main():
     with open(plain_files["typ"], "r") as f:
         plain_typ_str = f.read()
     
+    
+    
     rm_tmpd_and_files(tmpd)
     
     if v >= GenEvoConstants.V_DBG:
@@ -348,16 +357,19 @@ def main():
         if v >= GenEvoConstants.V_DBG:
             print(" for local multiprocessing.")
         pool_size = cpu_count()
-        pool = Pool(pool_size, initialize_worker, [simulation_cfg_str, trips_str, vtypes_str, plain_con_str, plain_edg_str, plain_nod_str, plain_tll_str, plain_typ_str, v])
+        pool = Pool(pool_size, GenEvoEvaluate.initialize_worker, [simulation_cfg_str, trips_str, vtypes_str, plain_con_str, plain_edg_str, plain_nod_str, plain_tll_str, plain_typ_str, v])
     elif use_mpi:
         if v >= GenEvoConstants.V_DBG:
             print(" for mpi.")
-        #TODO: Prepare MPI
-        #TODO: create all variables which are needed and at least initialize workers by calling initialize_worker for each one.
+        GenEvoEvaluate.initialize_worker(simulation_cfg_str, trips_str, vtypes_str, plain_con_str, plain_edg_str, plain_nod_str, plain_tll_str, plain_typ_str, v)
+        glb_mpi = [("plain_con_m", GenEvoEvaluate.plain_con_g), ("plain_edg_m", GenEvoEvaluate.plain_edg_g), ("plain_nod_m", GenEvoEvaluate.plain_nod_g), ("plain_tll_m", GenEvoEvaluate.plain_tll_g), ("plain_typ_m", GenEvoEvaluate.plain_typ_g), ("sumo_cfg_m", GenEvoEvaluate.sumo_cfg_g), ("trips_m", GenEvoEvaluate.trips_g), ("vtypes_m", GenEvoEvaluate.vtypes_g), ("v_glb_m", GenEvoEvaluate.v_glb_g), ("netcnvt_m", GenEvoEvaluate.netcnvt_g), ("sumo_bin_m", GenEvoEvaluate.sumo_bin_g)]
+        
+        mpi_pool = futures.MPIPoolExecutor(globals=glb_mpi, main=True)
+        mpi_pool.bootup(wait=True)
     else:
         if v >= GenEvoConstants.V_DBG:
             print(" for single threading.")
-        initialize_worker(simulation_cfg_str, trips_str, vtypes_str, plain_con_str, plain_edg_str, plain_nod_str, plain_tll_str, plain_typ_str, v)
+        GenEvoEvaluate.initialize_worker(simulation_cfg_str, trips_str, vtypes_str, plain_con_str, plain_edg_str, plain_nod_str, plain_tll_str, plain_typ_str, v)
     
     del plain_files
     del plain_con_str
@@ -379,8 +391,7 @@ def main():
     if use_local_mt:
         generation_fitness = local_mp_evaluate_population(generation, pool)
     elif use_mpi:
-        #TODO: Call mpi_evaluate_population with approbiate parameters
-        pass
+        generation_fitness = mpi_evaluate_population(generation, mpi_pool)
     else:
         generation_fitness = single_evaluate_population(generation)
     
@@ -410,8 +421,7 @@ def main():
         if use_local_mt:
             generation_fitness = local_mp_evaluate_population(generation, pool)
         elif use_mpi:
-            #TODO: Call mpi_evaluate_population with approbiate parameters
-            pass
+            generation_fitness = mpi_evaluate_population(generation, mpi_pool)
         else:
             generation_fitness = single_evaluate_population(generation)
         
@@ -452,15 +462,14 @@ def main():
         pool.close()
         pool.join()
     elif use_mpi:
-        #TODO: Do cleanups for MPI if needed
-        pass
+        mpi_pool.shutdown(wait=True)
     
     if not best_net_path is False:
         netcnvt_bin = load_netconvert_binary()
         tmpd, best_plain_files = cnvt_net_to_plain(net_path, netcnvt_bin, "best", False)
         hack_for_cologne(best_plain_files)
         best_nr = Net_Repr(best_plain_files)
-        modify_net(fittest_individual[0], best_nr, best_plain_files, best_net_path, netcnvt_bin)
+        GenEvoEvaluate.modify_net(fittest_individual[0], best_nr, best_plain_files, best_net_path, netcnvt_bin)
         rm_tmpd_and_files(tmpd)
         
     t_t_1 = time.monotonic()

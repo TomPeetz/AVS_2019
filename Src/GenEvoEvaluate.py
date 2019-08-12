@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from ModMap import *
 import GenEvoConstants
+import __main__
 
 if 'SUMO_HOME' in os.environ:
     sumo_bin = os.path.join(os.environ['SUMO_HOME'], 'bin')
@@ -32,50 +33,50 @@ WORKER_PLAIN_FILES =  { "con" : Path("plain.con.xml"),
                         "tll" : Path("plain.tll.xml"),
                         "typ" : Path("plain.typ.xml") }
 
-plain_con = None
-plain_edg = None
-plain_nod = None
-plain_tll = None
-plain_typ = None
-sumo_cfg = None
-trips = None
-vtypes = None
+plain_con_g = None
+plain_edg_g = None
+plain_nod_g = None
+plain_tll_g = None
+plain_typ_g = None
+sumo_cfg_g = None
+trips_g = None
+vtypes_g = None
 
-v_glb = False
+v_glb_g = False
 
-netcnvt = False
-sumo_bin = False
+netcnvt_g = False
+sumo_bin_g = False
 
 def initialize_worker(sumo_cfg_str, trips_file_str, vtypes_file_str, plain_con_str, plain_edg_str, plain_nod_str, plain_tll_str, plain_typ_str, verbose):
-    global sumo_cfg
-    global trips
-    global vtypes
-    global plain_con
-    global plain_edg
-    global plain_nod
-    global plain_tll
-    global plain_typ
+    global sumo_cfg_g
+    global trips_g
+    global vtypes_g
+    global plain_con_g
+    global plain_edg_g
+    global plain_nod_g
+    global plain_tll_g
+    global plain_typ_g
     
-    global v_glb
-    v_glb = verbose
+    global v_glb_g
+    v_glb_g = verbose
     
-    global netcnvt
-    netcnvt = load_netconvert_binary()
+    global netcnvt_g
+    netcnvt_g = load_netconvert_binary()
     
-    global sumo_bin
-    sumo_bin = sumolib.checkBinary("sumo")
+    global sumo_bin_g
+    sumo_bin_g = sumolib.checkBinary("sumo")
     
-    if v_glb >= GenEvoConstants.V_DBG:
+    if v_glb_g >= GenEvoConstants.V_DBG:
         print("Worker {} initializing.".format(os.getpid()))
     
-    plain_con = plain_con_str
-    plain_edg = plain_edg_str
-    plain_nod = plain_nod_str
-    plain_tll = plain_tll_str
-    plain_typ = plain_typ_str
+    plain_con_g = plain_con_str
+    plain_edg_g = plain_edg_str
+    plain_nod_g = plain_nod_str
+    plain_tll_g = plain_tll_str
+    plain_typ_g = plain_typ_str
     
-    trips = trips_file_str
-    vtypes = vtypes_file_str
+    trips_g = trips_file_str
+    vtypes_g = vtypes_file_str
     
     cfg_file = io.StringIO(sumo_cfg_str)
     sumo_cfg_tree = ET.parse(cfg_file)
@@ -89,17 +90,36 @@ def initialize_worker(sumo_cfg_str, trips_file_str, vtypes_file_str, plain_con_s
     tmp_cnf_path = Path(tmpd, S_CONFIG)
     sumo_cfg_tree.write(tmp_cnf_path)
     with open(tmp_cnf_path, "r") as f:
-        sumo_cfg = f.read()
+        sumo_cfg_g = f.read()
     for f in tmpd.iterdir():
         os.unlink(f)
     os.rmdir(tmpd)
     
-    if v_glb >= GenEvoConstants.V_DBG:
+    if v_glb_g >= GenEvoConstants.V_DBG:
         print("Worker {} ready.".format(os.getpid()))
         
 
-def populate_tmpd():
+def populate_tmpd(mpi):
     
+    if mpi:
+        plain_con = __main__.plain_con_m
+        plain_edg = __main__.plain_edg_m
+        plain_nod = __main__.plain_nod_m
+        plain_tll = __main__.plain_tll_m
+        plain_typ = __main__.plain_typ_m
+        sumo_cfg = __main__.sumo_cfg_m
+        trips = __main__.trips_m
+        vtypes = __main__.vtypes_m
+    else:
+        plain_con = plain_con_g
+        plain_edg = plain_edg_g
+        plain_nod = plain_nod_g
+        plain_tll = plain_tll_g
+        plain_typ = plain_typ_g
+        sumo_cfg = sumo_cfg_g
+        trips = trips_g
+        vtypes = vtypes_g
+        
     tmpd = Path(tempfile.mkdtemp())
     plain_files = {}
     
@@ -185,7 +205,7 @@ def modify_net(individual, nr, plain_files, net_file, netcnvt_bin):
     nr.write_to_plain()
     cnvt_plain_to_net(netcnvt_bin, plain_files, net_file, False)
     
-def execute_simulation(s_config):
+def execute_simulation(s_config, sumo_bin):
     res = subprocess.run([sumo_bin, str(s_config)],capture_output=True,cwd=s_config.parent)
     return res.returncode
 
@@ -202,16 +222,25 @@ def extract_results(tmpd):
 def cleanup(tmpd):
     rm_tmpd_and_files(tmpd)
 
-def evaluate_individual(individual):
+def evaluate_individual(individual, mpi):
     iid, *_ = individual
     
     # ~ _, dna, _ = individual
     # ~ pprint("dna")
     # ~ pprint(hashlib.sha1(str(dna).encode("UTF-8")).hexdigest())
     
+    if mpi:
+        v_glb = __main__.v_glb_m
+        netcnvt = __main__.netcnvt_m
+        sumo_bin = __main__.sumo_bin_m
+    else:
+        v_glb = v_glb_g
+        netcnvt = netcnvt_g
+        sumo_bin = sumo_bin_g
+    
     if v_glb >= GenEvoConstants.V_DBG:
         print("Worker {} populating tmpd.".format(os.getpid()))
-    nr, tmpd, plain_files, s_config, net_file, log_file = populate_tmpd()
+    nr, tmpd, plain_files, s_config, net_file, log_file = populate_tmpd(mpi)
     
     if v_glb >= GenEvoConstants.V_DBG:
         print("Worker {} modifing net.".format(os.getpid()))
@@ -219,7 +248,7 @@ def evaluate_individual(individual):
     
     if v_glb >= GenEvoConstants.V_DBG:
         print("Worker {} starting sumo in {}.".format(os.getpid(),str(tmpd)))
-    returncode = execute_simulation(s_config)
+    returncode = execute_simulation(s_config, sumo_bin)
     if v_glb >= GenEvoConstants.V_INF:
         print("Worker {} sumo finished with returncode: {}.".format(os.getpid(), returncode))
     
