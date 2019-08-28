@@ -216,11 +216,6 @@ def main():
         print(err.format(sys.argv[0]), file=sys.stderr)
         sys.exit(1)
     
-    #TODO: Remove if MPI is ready
-    # ~ if use_mpi:
-        # ~ print("Not implemented!", file=sys.stderr)
-        # ~ sys.exit(1)
-    
     if use_local_mt and use_mpi:
         print("Only local multiprocessing xor mpi!")
         print(err.format(sys.argv[0]), file=sys.stderr)
@@ -347,8 +342,6 @@ def main():
     with open(plain_files["typ"], "r") as f:
         plain_typ_str = f.read()
     
-    
-    
     rm_tmpd_and_files(tmpd)
     
     if v >= GenEvoConstants.V_DBG:
@@ -366,6 +359,8 @@ def main():
         
         mpi_pool = futures.MPIPoolExecutor(globals=glb_mpi, main=True)
         mpi_pool.bootup(wait=True)
+        
+        del glb_mpi
     else:
         if v >= GenEvoConstants.V_DBG:
             print(" for single threading.")

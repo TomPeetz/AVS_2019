@@ -10,6 +10,7 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from ModMap import *
+from socket import gethostname
 import GenEvoConstants
 import __main__
 
@@ -96,7 +97,7 @@ def initialize_worker(sumo_cfg_str, trips_file_str, vtypes_file_str, plain_con_s
     os.rmdir(tmpd)
     
     if v_glb_g >= GenEvoConstants.V_DBG:
-        print("Worker {} ready.".format(os.getpid()))
+        print("Worker {} - {} ready.".format(gethostname(), os.getpid()))
         
 
 def populate_tmpd(mpi):
@@ -169,9 +170,9 @@ def modify_net(individual, nr, plain_files, net_file, netcnvt_bin):
             elif op == GenEvoConstants.RIGHT_BEFORE_LEFT:
                 change_intersection_to_right_before_left(g_id, nr)
             elif op == GenEvoConstants.TRAFFIC_LIGHT:
-                change_intersection_to_traffic_light_right_on_red(g_id, nr)
-            elif op == GenEvoConstants.TRAFFIC_LIGHT_RIGHT_ON_RED:
                 change_intersection_to_traffic_light(g_id, nr)
+            elif op == GenEvoConstants.TRAFFIC_LIGHT_RIGHT_ON_RED:
+                change_intersection_to_traffic_light_right_on_red(g_id, nr)
             elif op == GenEvoConstants.ROUNDABOUT:
                 change_intersection_to_roundabout(g_id, nr)
             elif op == GenEvoConstants.PRIORITY:
@@ -239,25 +240,25 @@ def evaluate_individual(individual, mpi):
         sumo_bin = sumo_bin_g
     
     if v_glb >= GenEvoConstants.V_DBG:
-        print("Worker {} populating tmpd.".format(os.getpid()))
+        print("Worker {} - {} populating tmpd.".format(gethostname(), os.getpid()))
     nr, tmpd, plain_files, s_config, net_file, log_file = populate_tmpd(mpi)
     
     if v_glb >= GenEvoConstants.V_DBG:
-        print("Worker {} modifing net.".format(os.getpid()))
+        print("Worker {} - {} modifing net.".format(gethostname(), os.getpid()))
     modify_net(individual, nr, plain_files, net_file, netcnvt)
     
     if v_glb >= GenEvoConstants.V_DBG:
-        print("Worker {} starting sumo in {}.".format(os.getpid(),str(tmpd)))
+        print("Worker {} - {} starting sumo in {}.".format(gethostname(), os.getpid(),str(tmpd)))
     returncode = execute_simulation(s_config, sumo_bin)
     if v_glb >= GenEvoConstants.V_INF:
-        print("Worker {} sumo finished with returncode: {}.".format(os.getpid(), returncode))
+        print("Worker {} - {} sumo finished with returncode: {}.".format(gethostname(), os.getpid(), returncode))
     
     time_loss = extract_results(tmpd)
     if v_glb >= GenEvoConstants.V_INF:
-        print("Worker {} sumo computed TimeLoss: {}.".format(os.getpid(), time_loss))
+        print("Worker {} - {} sumo computed TimeLoss: {}.".format(gethostname(), os.getpid(), time_loss))
     
     if v_glb >= GenEvoConstants.V_DBG:
-        print("Worker {} cleaning up.".format(os.getpid()))
+        print("Worker {} - {} cleaning up.".format(gethostname(), os.getpid()))
     cleanup(tmpd)
     
     return iid, time_loss
