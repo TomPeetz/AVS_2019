@@ -254,8 +254,8 @@ def main():
     try:
         population_size = int(population_size)
         number_of_generations = int(number_of_generations)
-        if population_size < 3 or population_size % 2 != 0:
-            print("Please specify only even numbers greater than 2 for population size!", file=sys.stderr)
+        if population_size < 3 or population_size % 4 != 0:
+            print("Please specify only numbers greater than 2 and dividable by 4 for population size!", file=sys.stderr)
             raise ValueError()
         if number_of_generations < 2:
             print("Please specify a number of generations greater than 1!", file=sys.stderr)
