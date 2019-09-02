@@ -401,6 +401,9 @@ def main():
     if v >= GenEvoConstants.V_STAT:
         print("Current generation is {}. Fittest individuals name is {} and it has a fitness value of {}.".format(generation_ctr, fittest_individual[0][0], fittest_individual[0][2]))
     
+    
+    netcnvt_bin = load_netconvert_binary()
+    
     while generation_ctr < number_of_generations:
         if v >= GenEvoConstants.V_STAT:
             t_0 = time.monotonic()
@@ -441,6 +444,13 @@ def main():
         
         if fittest_individual_in_generation[0][2] < fittest_individual[0][2]:
             fittest_individual = fittest_individual_in_generation
+            if not best_net_path is False:
+                tmpd, best_plain_files = cnvt_net_to_plain(net_path, netcnvt_bin, "best", False)
+                hack_for_cologne(best_plain_files)
+                best_nr = Net_Repr(best_plain_files)
+                GenEvoEvaluate.modify_net(fittest_individual[0], best_nr, best_plain_files, best_net_path, netcnvt_bin)
+                rm_tmpd_and_files(tmpd)
+                
         if v >= GenEvoConstants.V_INF:
             t_1 = time.monotonic()
         if v >= GenEvoConstants.V_STAT:
