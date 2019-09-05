@@ -28,10 +28,10 @@ def rm_tmpd_and_files(tmpd):
     os.rmdir(tmpd)
 
 #Unpack provided net.xml file for modification
-def cnvt_net_to_plain(net_path, netcnvt_bin, plain_output_prefix, verbose=False):
+def cnvt_net_to_plain(net_path, netcnvt_bin, plain_output_prefix, verbose=False, timeout_s=None):
     cwd = Path(os.getcwd())
     tmpd = Path(tempfile.mkdtemp())
-    res = subprocess.run([netcnvt_bin, "-s", str(net_path), "--plain-output-prefix", plain_output_prefix], capture_output=True, cwd=tmpd)
+    res = subprocess.run([netcnvt_bin, "-s", str(net_path), "--plain-output-prefix", plain_output_prefix], capture_output=True, cwd=tmpd, timeout=timeout_s)
     if verbose:
         print("Output from: ")
         print(*res.args, sep=" ")
@@ -49,9 +49,8 @@ def cnvt_net_to_plain(net_path, netcnvt_bin, plain_output_prefix, verbose=False)
     return tmpd, plain_files
 
 #Pack changed plain files into new net.xml
-def cnvt_plain_to_net(netcnvt_bin, plain_files, new_net_path, verbose):
-    
-    res = subprocess.run([netcnvt_bin, "-n", str(plain_files["nod"]), "-e", str(plain_files["edg"]), "-x", str(plain_files["con"]), "-i", str(plain_files["tll"]), "-t", str(plain_files["typ"]) , "-o", str(new_net_path)], capture_output=True)
+def cnvt_plain_to_net(netcnvt_bin, plain_files, new_net_path, verbose, timeout_s=None):
+    res = subprocess.run([netcnvt_bin, "-n", str(plain_files["nod"]), "-e", str(plain_files["edg"]), "-x", str(plain_files["con"]), "-i", str(plain_files["tll"]), "-t", str(plain_files["typ"]) , "-o", str(new_net_path)], capture_output=True, timeout=timeout_s)
     if verbose:
         print("Output from: ")
         print(*res.args, sep=" ")

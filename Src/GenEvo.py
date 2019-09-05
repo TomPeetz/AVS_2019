@@ -138,35 +138,76 @@ def generate_new_generation(old_generation, population_size, genome, k_num, muta
     new_generation = selected_parents + children
     return new_generation
     
-def single_evaluate_population(population):
-    results = []
-    for individual in filter(lambda x: x[2] is False, population):
-        results.append(GenEvoEvaluate.evaluate_individual(individual, False))
-    return results
-   
-def local_mp_evaluate_population(population, pool):
-    async_results=[]
-    for individual in filter(lambda x: x[2] is False, population):
-        async_results.append(pool.apply_async(GenEvoEvaluate.evaluate_individual,(individual, False)))
-    results=[]
-    for result in async_results:
-        results.append(result.get())
-    return results
+def evaluate_population(population, op_mode, pool, timeout_s):
+    t_M=0
+    t_E=0
     
-def mpi_evaluate_population(population, mpi_pool):
-    async_results=[]
+    while True:
+        t_0 = time.monotonic()
+        if op_mode == GenEvoConstants.MODE_LMT:
+            generation_fitness, timeouts = local_mp_evaluate_population(population, pool, timeout_s)
+        elif op_mode == GenEvoConstants.MODE_MPI:
+            generation_fitness, timeouts = mpi_evaluate_population(population, pool, timeout_s)
+        else:
+            generation_fitness, timeouts = single_evaluate_population(population, timeout_s)
+            
+        t_1 = time.monotonic()
+        t_E += t_1 - t_0
+        
+        t_0 = time.monotonic()
+        apply_fitness_to_individuals(population, generation_fitness)
+        t_1 = time.monotonic()
+        t_M += t_1 - t_0
+        
+        if timeouts == 0:
+            break
+        else:
+            print("WARNING: {} timeouts while evaluating Generation. Retrying...".format(timeouts))
+        
+    return t_E, t_M
+
+def single_evaluate_population(population, timeout_s=False):
+    results = []
+    timeouts = 0
     for individual in filter(lambda x: x[2] is False, population):
-        async_results.append(mpi_pool.submit(GenEvoEvaluate.evaluate_individual, individual, True))
+        try:
+            results.append(GenEvoEvaluate.evaluate_individual(individual, False, timeout_s))
+        except GenEvoEvaluate.EvaluatingException:
+            timeouts += 1
+    return results, timeouts
+   
+def local_mp_evaluate_population(population, pool, timeout_s=False):
+    async_results=[]
+    timeouts = 0
+    for individual in filter(lambda x: x[2] is False, population):
+        async_results.append(pool.apply_async(GenEvoEvaluate.evaluate_individual,(individual, False, timeout_s)))
     results=[]
     for result in async_results:
-        results.append(result.result())
-    return results
+        try:
+            results.append(result.get())
+        except GenEvoEvaluate.EvaluatingException:
+            timeouts += 1
+    return results, timeouts
+    
+def mpi_evaluate_population(population, mpi_pool, timeout_s=False):
+    async_results=[]
+    timeouts=0
+    for individual in filter(lambda x: x[2] is False, population):
+        async_results.append(mpi_pool.submit(GenEvoEvaluate.evaluate_individual, individual, True, timeout_s))
+    results=[]
+    for result in async_results:
+        try:
+            results.append(result.result())
+        except GenEvoEvaluate.EvaluatingException:
+            timeouts += 1
+            
+    return results, timeouts
 
 def main():
     
     t_t_0 = time.monotonic()
     
-    err="{} -c <simulation.sumocfg (path)> -s <searchspace.json (path)> -p <Population size (int)> -g <Number of generations (int)> [-r <Seed (hex string)> -k <crossover points (int)> -x <mutation rate 0..1 (float)> -o <best net (Path)> -v verbose (specify multiple times for more messages) [-l local multiprocessing | -m mpi]]"
+    err="{} -c <simulation.sumocfg (path)> -s <searchspace.json (path)> -p <Population size (int)> -g <Number of generations (int)> [-r <Seed (hex string)> -k <crossover points (int)> -x <mutation rate 0..1 (float)> -o <best net (Path)> -t <timeout sec (int)> -v verbose (specify multiple times for more messages) [-l local multiprocessing | -m mpi]]"
     
     individual_id_ctr = 1
     
@@ -181,9 +222,10 @@ def main():
     use_mpi = False
     k_num = False
     mutation_rate = False
+    timeout_s = None
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "vlmc:s:p:g:r:k:x:o:")
+        opts, args = getopt.getopt(sys.argv[1:], "vlmc:s:p:g:r:k:x:o:t:")
     except getopt.GetoptError:
         print(err.format(sys.argv[0]))
         sys.exit(1)
@@ -211,6 +253,8 @@ def main():
             mutation_rate = a
         elif o == "-o":
             best_net_path = a
+        elif o == "-t":
+            timeout_s = a
         
     if simulation_cfg_path is False or searchspace_path is False or population_size is False or number_of_generations is False:
         print(err.format(sys.argv[0]), file=sys.stderr)
@@ -220,6 +264,12 @@ def main():
         print("Only local multiprocessing xor mpi!")
         print(err.format(sys.argv[0]), file=sys.stderr)
         sys.exit(1)
+    if use_local_mt:
+        op_mode = GenEvoConstants.MODE_LMT
+    elif use_mpi:
+        op_mode = GenEvoConstants.MODE_MPI
+    else:
+        op_mode = GenEvoConstants.MODE_LOC
     
     searchspace_path = Path(searchspace_path).resolve()
     if not searchspace_path.exists() or searchspace_path.is_dir():
@@ -310,6 +360,19 @@ def main():
     if v >= GenEvoConstants.V_INF:
         print("Using seed: {0:x}".format(seed))
     
+    if not timeout_s is None:
+        try:
+            timeout_s = int(timeout_s)
+            if timeout_s < 1:
+                raise ValueError()
+        except ValueError:
+            print("Please specify timeout as integer and at least 1 second long!", file=sys.stderr)
+            print(err.format(sys.argv[0]), file=sys.stderr)
+            sys.exit(1)
+        if v >= GenEvoConstants.V_INF:
+            print("Setting timeout for subprocesses to {}s.".format(timeout_s))
+    
+    
     with open(searchspace_path, "r") as f:
         searchspace = json.loads(f.read())
     
@@ -357,14 +420,15 @@ def main():
         GenEvoEvaluate.initialize_worker(simulation_cfg_str, trips_str, vtypes_str, plain_con_str, plain_edg_str, plain_nod_str, plain_tll_str, plain_typ_str, v)
         glb_mpi = [("plain_con_m", GenEvoEvaluate.plain_con_g), ("plain_edg_m", GenEvoEvaluate.plain_edg_g), ("plain_nod_m", GenEvoEvaluate.plain_nod_g), ("plain_tll_m", GenEvoEvaluate.plain_tll_g), ("plain_typ_m", GenEvoEvaluate.plain_typ_g), ("sumo_cfg_m", GenEvoEvaluate.sumo_cfg_g), ("trips_m", GenEvoEvaluate.trips_g), ("vtypes_m", GenEvoEvaluate.vtypes_g), ("v_glb_m", GenEvoEvaluate.v_glb_g), ("netcnvt_m", GenEvoEvaluate.netcnvt_g), ("sumo_bin_m", GenEvoEvaluate.sumo_bin_g)]
         
-        mpi_pool = futures.MPIPoolExecutor(globals=glb_mpi, main=True)
-        mpi_pool.bootup(wait=True)
+        pool = futures.MPIPoolExecutor(globals=glb_mpi, main=True)
+        pool.bootup(wait=True)
         
         del glb_mpi
     else:
         if v >= GenEvoConstants.V_DBG:
             print(" for single threading.")
         GenEvoEvaluate.initialize_worker(simulation_cfg_str, trips_str, vtypes_str, plain_con_str, plain_edg_str, plain_nod_str, plain_tll_str, plain_typ_str, v)
+        pool=None
     
     del plain_files
     del plain_con_str
@@ -383,14 +447,7 @@ def main():
     generation = initialize_first_generation(genome, population_size, stable_random, individual_id_ctr)
     individual_id_ctr += population_size
     
-    if use_local_mt:
-        generation_fitness = local_mp_evaluate_population(generation, pool)
-    elif use_mpi:
-        generation_fitness = mpi_evaluate_population(generation, mpi_pool)
-    else:
-        generation_fitness = single_evaluate_population(generation)
-    
-    apply_fitness_to_individuals(generation, generation_fitness)
+    evaluate_population(generation, op_mode, pool, timeout_s)
     generation_ctr = 0
     
     fittest_individual = [generation[0], generation_ctr]
@@ -413,27 +470,13 @@ def main():
         if v >= GenEvoConstants.V_INF:
             t_1 = time.monotonic()
             print("Generation {} created in {}s.".format(generation_ctr+1, t_1-t_0))
-        if v >= GenEvoConstants.V_STAT:
-            t_0 = time.monotonic()
         
-        if use_local_mt:
-            generation_fitness = local_mp_evaluate_population(generation, pool)
-        elif use_mpi:
-            generation_fitness = mpi_evaluate_population(generation, mpi_pool)
-        else:
-            generation_fitness = single_evaluate_population(generation)
-        
-        if v >= GenEvoConstants.V_STAT:
-            t_1 = time.monotonic()
-            t_E = t_1 - t_0
+        t_E, t_M = evaluate_population(generation, op_mode, pool, timeout_s)
         if v >= GenEvoConstants.V_DBG:
             print("Evaluating the new individuals took {}s.".format(t_E))
-            t_0 = time.monotonic()
-        apply_fitness_to_individuals(generation, generation_fitness)
-        generation_ctr += 1
         if v >= GenEvoConstants.V_INF:
-            t_1 = time.monotonic()
-            print("Calculated fitness applied to individuals in {}s.".format(t_1-t_0))
+            print("Calculated fitness applied to individuals in {}s.".format(t_M))
+        generation_ctr += 1
         
         if v >= GenEvoConstants.V_INF:
             t_0 = time.monotonic()
@@ -467,7 +510,7 @@ def main():
         pool.close()
         pool.join()
     elif use_mpi:
-        mpi_pool.shutdown(wait=True)
+        pool.shutdown(wait=True)
     
     if not best_net_path is False:
         netcnvt_bin = load_netconvert_binary()

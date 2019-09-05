@@ -21,6 +21,8 @@ else:
     sys.exit("please declare environment variable 'SUMO_HOME'")
 import sumolib
 
+class EvaluatingException(Exception):
+    pass
 
 S_CONFIG = Path("sim.sumocfg")
 TRIPS_FILE = Path("sim.trips.xml")
@@ -159,7 +161,7 @@ def populate_tmpd(mpi):
     
     return nr, tmpd, plain_files, s_config, net_file, log_file
     
-def modify_net(individual, nr, plain_files, net_file, netcnvt_bin):
+def modify_net(individual, nr, plain_files, net_file, netcnvt_bin, timeout_s=None):
     _, dna, _, _ = individual
     
     for g_type, g_id, g_mod in dna:
@@ -204,10 +206,10 @@ def modify_net(individual, nr, plain_files, net_file, netcnvt_bin):
                 pass
     
     nr.write_to_plain()
-    cnvt_plain_to_net(netcnvt_bin, plain_files, net_file, False)
+    cnvt_plain_to_net(netcnvt_bin, plain_files, net_file, False, timeout_s=timeout_s)
     
-def execute_simulation(s_config, sumo_bin):
-    res = subprocess.run([sumo_bin, str(s_config)],capture_output=True,cwd=s_config.parent)
+def execute_simulation(s_config, sumo_bin, timeout_s=None):
+    res = subprocess.run([sumo_bin, str(s_config)],capture_output=True,cwd=s_config.parent,timeout=timeout_s)
     return res.returncode
 
 def extract_results(tmpd):
@@ -223,7 +225,7 @@ def extract_results(tmpd):
 def cleanup(tmpd):
     rm_tmpd_and_files(tmpd)
 
-def evaluate_individual(individual, mpi):
+def evaluate_individual(individual, mpi, timeout_s):
     iid, *_ = individual
     
     # ~ _, dna, _ = individual
@@ -242,23 +244,28 @@ def evaluate_individual(individual, mpi):
     if v_glb >= GenEvoConstants.V_DBG:
         print("Worker {} - {} populating tmpd.".format(gethostname(), os.getpid()))
     nr, tmpd, plain_files, s_config, net_file, log_file = populate_tmpd(mpi)
-    
-    if v_glb >= GenEvoConstants.V_DBG:
-        print("Worker {} - {} modifing net.".format(gethostname(), os.getpid()))
-    modify_net(individual, nr, plain_files, net_file, netcnvt)
-    
-    if v_glb >= GenEvoConstants.V_DBG:
-        print("Worker {} - {} starting sumo in {}.".format(gethostname(), os.getpid(),str(tmpd)))
-    returncode = execute_simulation(s_config, sumo_bin)
-    if v_glb >= GenEvoConstants.V_INF:
-        print("Worker {} - {} sumo finished with returncode: {}.".format(gethostname(), os.getpid(), returncode))
-    
-    time_loss = extract_results(tmpd)
-    if v_glb >= GenEvoConstants.V_INF:
-        print("Worker {} - {} sumo computed TimeLoss: {}.".format(gethostname(), os.getpid(), time_loss))
-    
-    if v_glb >= GenEvoConstants.V_DBG:
-        print("Worker {} - {} cleaning up.".format(gethostname(), os.getpid()))
-    cleanup(tmpd)
+
+    try:
+        if v_glb >= GenEvoConstants.V_DBG:
+            print("Worker {} - {} modifing net.".format(gethostname(), os.getpid()))
+        modify_net(individual, nr, plain_files, net_file, netcnvt, timeout_s)
+        
+        if v_glb >= GenEvoConstants.V_DBG:
+            print("Worker {} - {} starting sumo in {}.".format(gethostname(), os.getpid(),str(tmpd)))
+        returncode = execute_simulation(s_config, sumo_bin, timeout_s)
+        if v_glb >= GenEvoConstants.V_INF:
+            print("Worker {} - {} sumo finished with returncode: {}.".format(gethostname(), os.getpid(), returncode))
+        
+        time_loss = extract_results(tmpd)
+        if v_glb >= GenEvoConstants.V_INF:
+            print("Worker {} - {} sumo computed TimeLoss: {}.".format(gethostname(), os.getpid(), time_loss))
+    except subprocess.TimeoutExpired:
+        if v_glb >= GenEvoConstants.V_INF:
+            print("Worker {} - {} timeout!".format(gethostname(), os.getpid()))
+        raise EvaluatingException()
+    finally:
+        if v_glb >= GenEvoConstants.V_DBG:
+            print("Worker {} - {} cleaning up.".format(gethostname(), os.getpid()))
+            cleanup(tmpd)
     
     return iid, time_loss

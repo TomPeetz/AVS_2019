@@ -20,3 +20,7 @@ V_NO = 0
 V_STAT = 1
 V_INF = 2
 V_DBG = 3
+
+MODE_MPI = 1
+MODE_LOC = 2
+MODE_LMT = 4
